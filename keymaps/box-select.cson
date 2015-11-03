@@ -1,3 +1,3 @@
 'atom-workspace atom-text-editor:not(.mini)':
-  'ctrl-b':       'box-select:start'
+  'ctrl-b':       'box-select:toggle'
   'ctrl-shift-v': 'box-select:paste'

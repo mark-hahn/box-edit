@@ -9,7 +9,7 @@
     "atom": ">1.0.0"
   },
   "activationCommands": {
-    "atom-text-editor": ["box-select:start", "box-select:paste"]
+    "atom-text-editor": ["box-select:toggle", "box-select:paste"]
   },
   "dependencies": {
     "sub-atom": "^1.1.0"
