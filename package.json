@@ -2,13 +2,16 @@
   "name": "box-select",
   "main": "./lib/box-select",
   "version": "0.1.0",
-  "description": "An Atom package to allow rectangular selection with support for short line lengths.",
+  "description": "An Atom package for rectangular cut/paste; supports short lines.",
   "repository": "https://github.com/mark-hahn/box-select",
   "license": "MIT",
   "engines": {
     "atom": ">1.0.0"
   },
+  "activationCommands": {
+    "atom-text-editor": ["box-select:start", "box-select:paste"]
+  },
   "dependencies": {
-    "sub-atom": "*",
+    "sub-atom": "^1.1.0"
   }
 }

@@ -1,8 +1,7 @@
 
 ## box-select
 
-An Atom package to allow rectangular selection with support for short line lengths
-
+An Atom package for rectangular cut/paste; supports short lines.
 
 ### License
 
