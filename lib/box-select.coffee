@@ -24,28 +24,34 @@ class BoxSelect
   
   toggle: ->
     log 'toggle'
-    if @selectMode or @selectedMode
+    if @selectMode or @selectedMode or
+       not (@editor = @wspace.getActiveTextEditor()) 
       @clear()
-      return
-    @editor = @wspace.getActiveTextEditor()
-    if not @editor then return  
+      return  
+    
+    @pane       = @wspace.getActivePane()
     @editorView = atom.views.getView @editor
-    @editorComp = @editorView.component
     @buffer     = @editor.getBuffer()
     @chrWid     = @editor.getDefaultCharWidth()
     @chrHgt     = @editor.getLineHeightInPixels()
-
-    for cursor in @editor.getCursors()
-      cursor.setVisible no
-      cursor.clearSelection()
-    
-    @selectMode = yes
     {left:  @editorPosX, top:    @editorPosY, \
      width: @editorPosW, height: @editorPosH} =
                   @editorView.getBoundingClientRect()
+    @pane.onDidChangeActiveItem => @clear()
+    @selectMode = yes
     @addBoxEle()
-    
+  
+  hideAtomCursors: ->
+    for cursor in @editor.getCursors()
+      cursor.setVisible no
+      # cursor.clearSelection()
+
+  showAtomCursors: ->
+    for cursor in @editor.getCursors()
+      cursor.setVisible yes
+
   addBoxEle: ->
+    @hideAtomCursors()
     c = @cover = document.createElement 'div'
     c.id     = 'boxsel-cover'
     s        = c.style
@@ -57,15 +63,35 @@ class BoxSelect
     c.onmousedown  = (e) => @mouseEvent(e)
     c.onmousemove  = (e) => @mouseEvent(e)
     c.onmouseup    = (e) => @mouseEvent(e)
-    # c.onblur      = (e) => @mouseEvent(e)
-    document.body.onkeydown = (e) => @keydown e
+    c.onkeypress   = (e) => @keyEvent e
+    document.body.onkeydown = (e) => @keyEvent e
   
   removeBoxEle: ->
     if @cover 
       document.body.removeChild @cover
       @cover.removeChild @box
       @cover = @box = null
+    @showAtomCursors()
       
+  getScreenRowCol: (x, y) ->
+    row     = Math.round y / @editor.getLineHeightInPixels()
+    lastRow = @buffer.getLastRow()
+    left    = Infinity if row > lastRow
+    row     = Math.max 0, Math.min row, lastRow
+    col     = Math.round x / @chrWid
+    {row: row, col: col}
+    
+  copyText: ->
+    log 'copyText'
+    get = (style) => +@box.style[style].replace('px', '')
+    x = get 'left';  y = get 'top'
+    w = get 'width'; h = get 'height'
+    {row: row1, col: col1} = @getScreenRowCol x,   y
+    {row: row2, col: col2} = @getScreenRowCol x+w, y+h
+    log {row1, col1, row2, col2}
+    
+  delText : ->
+    
   mouseInEditor: (e) ->
     @editorPosX <= e.pageX < @editorPosX + @editorPosW and
     @editorPosY <= e.pageY < @editorPosY + @editorPosH
@@ -85,10 +111,8 @@ class BoxSelect
         @initPosY = e.pageY - @editorPosY - @chrHgt/2
         
       when 'mousemove' 
-        if not @mouseInEditor(e) 
-          @cover.style.cursor = 'auto'
-          return
-        if not @dragging then return
+        if not @dragging or not @mouseInEditor(e) then return
+        @hideAtomCursors()
         @cover.style.cursor = 'crosshair'
         if not @box then @addBoxEle()
 
@@ -114,47 +138,40 @@ class BoxSelect
         @dragging = no
         @selectedMode = yes
         
-  paste: ->  
-    log 'paste' 
-  
-  keydown: (e)->
-    if not @selectedMode then return
-    code = e.which + (if e.ctrlKey  then 1000 else 0) +
-                     (if e.altKey   then 2000 else 0) +
-                     (if e.shiftKey then 4000 else 0)
+  keyEvent: (e) ->
+    if not @selectMode then return
+    code = e.which + (if e.ctrlKey then 1000 else 0)
     switch code
       when 1088      # ctrl-X
-        log 'ctrl-X'
         @copyText()
         @delText()
-        @clear()
       when 1067      # ctrl-C
-        log 'ctrl-C'
         @copyText()
-        @clear()
       when 8, 46     # backspace, delete
-        log 'backspace or delete'
-      when 27        # escape
-        log 'escape'
-        @clear()
+        @delText()
+      # when 27        # escape
+      #   log 'esc'
       when 91        # [  (search on chromebook)
-        log 'search'
-        keyNotUsed = yes
-      else 
-        if 32 <= code < 255 then @clear()
-        keyNotUsed = yes
+        dontClear = yes
+      else
+        dontClear = (code > 127)
         log 'unknown key pressed:', code
-        
-    e.preventDefault()
-    e.stopPropagation()
+    
+    if not dontClear
+      log 'key clear'
+      @clear()
+      e.preventDefault()
+      e.stopPropagation()
 
   clear: -> 
     @cover?.style.cursor = 'auto'
-    for cursor in @editor.getCursors()
-      cursor.setVisible yes
     @dragging = @selectMode = @selectedMode = no
     @removeBoxEle()
+    log 'cleared'
 
+  paste: ->  
+    log 'paste' 
+  
   deactivate: ->
     @clear()
     @subs.dispose()
@@ -163,14 +180,6 @@ module.exports = new BoxSelect
 
 ###
   # Stolen from https://github.com/bigfive/atom-sublime-select
-  screenPositionForMouseEvent: (e) ->
-    {top, left} = @editorComp.pixelPositionForMouseEvent e
-    row     = Math.floor top / @editor.getLineHeightInPixels()
-    lastRow = @buffer.getLastRow()
-    left    = Infinity if row > lastRow
-    row     = Math.max 0, Math.min row, lastRow
-    col     = Math.round left / @chrWid
-    {row: row, col: col}
 
   {row: @row, column: @col} = @editor.getCursorScreenPosition()
   [row1, col1, row2, col2] = [@row, @col, row, col]
