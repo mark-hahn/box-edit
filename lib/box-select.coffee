@@ -24,10 +24,8 @@ class BoxSelect
   
   toggle: ->
     log 'toggle'
-    if @selectMode or @selectedMode or
-       not (@editor = @wspace.getActiveTextEditor()) 
-      @clear()
-      return  
+    if @selectMode or @selectedMode then @clear 'restorePane';      return  
+    if not (@editor = @wspace.getActiveTextEditor()) then @clear(); return  
     
     @pane       = @wspace.getActivePane()
     @editorView = atom.views.getView @editor
@@ -108,11 +106,13 @@ class BoxSelect
       bufCol1 = bufRange.start.column
       if bufRow is lastBufRow then continue
       lastBufRow = bufRow
-      if copy then copyText.push @editor.getTextInBufferRange bufRange
-      if del  then @editor.setTextInBufferRange bufRange, ''
-      @editor.addCursorAtBufferPosition [bufRow, bufCol1]
+      if copy
+        copyText.push @editor.getTextInBufferRange bufRange
+      if del 
+        @editor.setTextInBufferRange bufRange, ''
+        @editor.addCursorAtBufferPosition [bufRow, bufCol1]
     if copy then atom.clipboard.write copyText.join '\n'
-    @editor.getCursors()[0].destroy()
+    if del then @editor.getCursors()[0].destroy()
     @pane.activate()
     
   mouseInEditor: (e) ->
@@ -125,7 +125,7 @@ class BoxSelect
       
       when 'mousedown'
         if not @mouseInEditor e
-          @clear()
+          @clear 'restorePane'
           return
         @initMouseEvent = @lastMouseEvent = e
         @cover.style.cursor = 'crosshair'
@@ -178,17 +178,18 @@ class BoxSelect
       when 8,46 then @copyDelText no, yes  # backspace, delete
       when 91   then bubble = yes          # [  (search on chromebook)
       else
-        if code < 128 then @clear()
+        if code < 128 then @clear 'restorePane'
         else bubble = yes
         log 'unknown key pressed:', code
     if bubble
       e.preventDefault()
       e.stopPropagation()
 
-  clear: -> 
+  clear: (restorePane = no) -> 
     @cover?.style.cursor = 'auto'
     @dragging = @selectMode = @selectedMode = no
     @removeBoxEle()
+    if restorePane then @pane.activate()
     log 'cleared'
 
   paste: ->  
