@@ -31,6 +31,7 @@ class BoxSelect
     
     @pane       = @wspace.getActivePane()
     @editorView = atom.views.getView @editor
+    @editorComp = @editorView.component
     @buffer     = @editor.getBuffer()
     @chrWid     = @editor.getDefaultCharWidth()
     @chrHgt     = @editor.getLineHeightInPixels()
@@ -41,29 +42,30 @@ class BoxSelect
     @selectMode = yes
     @addBoxEle()
   
-  hideAtomCursors: ->
+  hideAtomCursors: (destroy = no) ->
+    for sel in @editor.getSelections()
+      sel.clear()
     for cursor in @editor.getCursors()
-      cursor.setVisible no
-      # cursor.clearSelection()
-
+      if destroy then cursor.destroy()
+      else cursor.setVisible no
+      
   showAtomCursors: ->
     for cursor in @editor.getCursors()
       cursor.setVisible yes
-
+      
   addBoxEle: ->
     @hideAtomCursors()
     c = @cover = document.createElement 'div'
     c.id     = 'boxsel-cover'
     s        = c.style
-    s.cursor = 'crosshair'
+    setTimeout (-> s.cursor = 'crosshair'), 50
     b = @box = document.createElement 'div'
     b.id     = 'boxsel-box'
     document.body.appendChild c
     c.appendChild b
-    c.onmousedown  = (e) => @mouseEvent(e)
-    c.onmousemove  = (e) => @mouseEvent(e)
-    c.onmouseup    = (e) => @mouseEvent(e)
-    c.onkeypress   = (e) => @keyEvent e
+    c.onmousedown = (e) => @mouseEvent(e)
+    c.onmousemove = (e) => @mouseEvent(e)
+    c.onmouseup   = (e) => @mouseEvent(e)
     document.body.onkeydown = (e) => @keyEvent e
   
   removeBoxEle: ->
@@ -74,23 +76,41 @@ class BoxSelect
     @showAtomCursors()
       
   getScreenRowCol: (x, y) ->
-    row     = Math.round y / @editor.getLineHeightInPixels()
-    lastRow = @buffer.getLastRow()
-    left    = Infinity if row > lastRow
-    row     = Math.max 0, Math.min row, lastRow
-    col     = Math.round x / @chrWid
-    {row: row, col: col}
+    row = Math.round y / @chrHgt
+    row = Math.max 0, Math.min @buffer.getLastRow(), row
+    col = Math.round x / @chrWid
+    {row, col}
+
+  getBoxRowCol: ->
+    evt1Pos = @editorComp.pixelPositionForMouseEvent @initMouseEvent
+    evt2Pos = @editorComp.pixelPositionForMouseEvent @lastMouseEvent
+    {left: x1, top: y1} = evt1Pos
+    {left: x2, top: y2} = evt2Pos
+    @pageOfsX = @initMouseEvent.pageX - x1
+    if x1 > x2 then [x2, x1] = [x1, x2]
+    if y1 > y2 then [y2, y1] = [y1, y2]
+    {row: row1, col: col1} = @getScreenRowCol x1, y1
+    {row: row2, col: col2} = @getScreenRowCol x2, y2
+    row2 -= 1
+    log 'getBoxRowCol', {row1, col1, row2, col2}
+    {row1, col1, row2, col2}
     
-  copyText: ->
-    log 'copyText'
-    get = (style) => +@box.style[style].replace('px', '')
-    x = get 'left';  y = get 'top'
-    w = get 'width'; h = get 'height'
-    {row: row1, col: col1} = @getScreenRowCol x,   y
-    {row: row2, col: col2} = @getScreenRowCol x+w, y+h
-    log {row1, col1, row2, col2}
-    
-  delText : ->
+  copyDelText: (copy, del)->
+    log 'copyDelText', {copy, del}
+    @hideAtomCursors 'destroy'
+    copyText = []
+    {row1, col1, row2, col2} = @getBoxRowCol()
+    lastBufRow = null
+    for row in [row1..row2]
+      bufRange = @editor.bufferRangeForScreenRange [[row, col1], [row, col2]]
+      bufRow  = bufRange.start.row
+      bufCol1 = bufRange.start.column
+      if bufRow is lastBufRow then continue
+      lastBufRow = bufRow
+      if copy then copyText.push @editor.getTextInBufferRange bufRange
+      if del  then @editor.setTextInBufferRange bufRange, ''
+      @editor.addCursorAtBufferPosition [bufRow, bufCol1]
+    if copy then atom.clipboard.write copyText.join '\n'
     
   mouseInEditor: (e) ->
     @editorPosX <= e.pageX < @editorPosX + @editorPosW and
@@ -104,14 +124,16 @@ class BoxSelect
         if not @mouseInEditor e
           @clear()
           return
+        @initMouseEvent = @lastMouseEvent = e
         @cover.style.cursor = 'crosshair'
         @selectedMode = no
         @dragging = yes
-        @initPosX = e.pageX - @editorPosX - @chrWid/2
-        @initPosY = e.pageY - @editorPosY - @chrHgt/2
+        @initPosX = e.pageX - @editorPosX # - @chrWid/2
+        @initPosY = e.pageY - @editorPosY # - @chrHgt/2
         
       when 'mousemove' 
         if not @dragging or not @mouseInEditor(e) then return
+        @lastMouseEvent = e
         @hideAtomCursors()
         @cover.style.cursor = 'crosshair'
         if not @box then @addBoxEle()
@@ -132,31 +154,28 @@ class BoxSelect
         else
           s.top    = (cursPosY  + @editorPosY) + 'px'
           s.height = (@initPosY - cursPosY   ) + 'px'
-        
-      when 'mouseup' 
-        @cover.style.cursor = 'auto'
+      
+      when 'mouseup'
         @dragging = no
         @selectedMode = yes
+        {row1, col1, row2, col2} = @getBoxRowCol()
+        s = @box.style
+        s.left   = (col1 * @chrWid + @pageOfsX  ) + 'px'
+        s.top    = (row1 * @chrHgt + @editorPosY) + 'px'
+        s.width  = ((col2-col1)   * @chrWid) + 'px'
+        s.height = ((row2-row1+1) * @chrHgt) + 'px'
         
   keyEvent: (e) ->
     if not @selectMode then return
     code = e.which + (if e.ctrlKey then 1000 else 0)
     switch code
-      when 1088      # ctrl-X
-        @copyText()
-        @delText()
-      when 1067      # ctrl-C
-        @copyText()
-      when 8, 46     # backspace, delete
-        @delText()
-      # when 27        # escape
-      #   log 'esc'
-      when 91        # [  (search on chromebook)
-        dontClear = yes
+      when 1088 then @copyDelText yes, yes # ctrl-X
+      when 1067 then @copyDelText yes, no  # ctrl-C
+      when 8,46 then @copyDelText no, yes  # backspace, delete
+      when 91   then dontClear = yes      # [  (search on chromebook)
       else
         dontClear = (code > 127)
         log 'unknown key pressed:', code
-    
     if not dontClear
       log 'key clear'
       @clear()
@@ -178,16 +197,3 @@ class BoxSelect
 
 module.exports = new BoxSelect
 
-###
-  # Stolen from https://github.com/bigfive/atom-sublime-select
-
-  {row: @row, column: @col} = @editor.getCursorScreenPosition()
-  [row1, col1, row2, col2] = [@row, @col, row, col]
-  if row1 > row2 then [row2, row1] = [row1, row2]   
-  if col1 > col2 then [col2, col1] = [col1, col2] 
-  s = @box.style
-  s.top    =  row1    * @chrHgt + 'px'
-  s.right  =  col2    * @chrWid + 'px'
-  s.bottom = (row2+1) * @chrHgt + 'px'
-  s.left   =  col1    * @chrWid + 'px'
-###    
