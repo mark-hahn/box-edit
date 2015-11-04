@@ -97,6 +97,7 @@ class BoxSelect
     
   copyDelText: (copy, del)->
     log 'copyDelText', {copy, del}
+    @clear()
     @hideAtomCursors 'destroy'
     copyText = []
     {row1, col1, row2, col2} = @getBoxRowCol()
@@ -111,6 +112,8 @@ class BoxSelect
       if del  then @editor.setTextInBufferRange bufRange, ''
       @editor.addCursorAtBufferPosition [bufRow, bufCol1]
     if copy then atom.clipboard.write copyText.join '\n'
+    @editor.getCursors()[0].destroy()
+    @pane.activate()
     
   mouseInEditor: (e) ->
     @editorPosX <= e.pageX < @editorPosX + @editorPosW and
@@ -167,18 +170,18 @@ class BoxSelect
         
   keyEvent: (e) ->
     if not @selectMode then return
+    clear = no
     code = e.which + (if e.ctrlKey then 1000 else 0)
     switch code
       when 1088 then @copyDelText yes, yes # ctrl-X
       when 1067 then @copyDelText yes, no  # ctrl-C
       when 8,46 then @copyDelText no, yes  # backspace, delete
-      when 91   then dontClear = yes      # [  (search on chromebook)
+      when 91   then bubble = yes          # [  (search on chromebook)
       else
-        dontClear = (code > 127)
+        if code < 128 then @clear()
+        else bubble = yes
         log 'unknown key pressed:', code
-    if not dontClear
-      log 'key clear'
-      @clear()
+    if bubble
       e.preventDefault()
       e.stopPropagation()
 
