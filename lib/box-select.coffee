@@ -8,13 +8,8 @@ log = (args...) ->
   console.log.apply console, ['box-select:'].concat args
 
 class BoxSelect
-  config:
-    selectionColor:
-      type: 'string'
-      default: '#888'
-      
+  
   activate: ->
-    log 'activate'
     @wspace = atom.workspace
     @subs = new SubAtom
     @subs.add atom.commands.add 'atom-text-editor', 
@@ -23,8 +18,7 @@ class BoxSelect
                                 'box-select:paste': => @paste()
   
   toggle: ->
-    log 'toggle'
-    if @selectMode or @selectedMode then @clear 'restorePane';      return  
+    if @selectMode then @clear 'restorePane';      return  
     if not (@editor = @wspace.getActiveTextEditor()) then @clear(); return  
     
     @pane       = @wspace.getActivePane()
@@ -68,6 +62,7 @@ class BoxSelect
   
   removeBoxEle: ->
     if @cover 
+      @setBoxVisible no
       document.body.removeChild @cover
       @cover.removeChild @box
       @cover = @box = null
@@ -77,7 +72,7 @@ class BoxSelect
     row = Math.round y / @chrHgt
     row = Math.max 0, Math.min @buffer.getLastRow(), row
     col = Math.round x / @chrWid
-    {row, col}
+    [row, col]
 
   getBoxRowCol: ->
     evt1Pos = @editorComp.pixelPositionForMouseEvent @initMouseEvent
@@ -85,20 +80,20 @@ class BoxSelect
     {left: x1, top: y1} = evt1Pos
     {left: x2, top: y2} = evt2Pos
     @pageOfsX = @initMouseEvent.pageX - x1
+    @pageOfsY = @initMouseEvent.pageY - y1
     if x1 > x2 then [x2, x1] = [x1, x2]
     if y1 > y2 then [y2, y1] = [y1, y2]
-    {row: row1, col: col1} = @getScreenRowCol x1, y1
-    {row: row2, col: col2} = @getScreenRowCol x2, y2
+    [row1, col1] = @getScreenRowCol x1, y1
+    [row2, col2] = @getScreenRowCol x2, y2
     row2 -= 1
-    log 'getBoxRowCol', {row1, col1, row2, col2}
-    {row1, col1, row2, col2}
+    [row1, col1, row2, col2]
     
   copyDelText: (copy, del)->
-    log 'copyDelText', {copy, del}
+    if not @boxVisible then return
     @clear()
-    @hideAtomCursors 'destroy'
+    if del then @hideAtomCursors 'destroy'
     copyText = []
-    {row1, col1, row2, col2} = @getBoxRowCol()
+    [row1, col1, row2, col2] = @getBoxRowCol()
     lastBufRow = null
     for row in [row1..row2]
       bufRange = @editor.bufferRangeForScreenRange [[row, col1], [row, col2]]
@@ -112,7 +107,8 @@ class BoxSelect
         @editor.setTextInBufferRange bufRange, ''
         @editor.addCursorAtBufferPosition [bufRow, bufCol1]
     if copy then atom.clipboard.write copyText.join '\n'
-    if del then @editor.getCursors()[0].destroy()
+    if del  then @editor.getCursors()[0].destroy()
+    @setBoxVisible no
     @pane.activate()
     
   mouseInEditor: (e) ->
@@ -129,13 +125,13 @@ class BoxSelect
           return
         @initMouseEvent = @lastMouseEvent = e
         @cover.style.cursor = 'crosshair'
-        @selectedMode = no
         @dragging = yes
-        @initPosX = e.pageX - @editorPosX # - @chrWid/2
-        @initPosY = e.pageY - @editorPosY # - @chrHgt/2
+        @initPosX = e.pageX - @editorPosX
+        @initPosY = e.pageY - @editorPosY
         
       when 'mousemove' 
         if not @dragging or not @mouseInEditor(e) then return
+        @setBoxVisible yes
         @lastMouseEvent = e
         @hideAtomCursors()
         @cover.style.cursor = 'crosshair'
@@ -160,13 +156,15 @@ class BoxSelect
       
       when 'mouseup'
         @dragging = no
-        @selectedMode = yes
-        {row1, col1, row2, col2} = @getBoxRowCol()
+        [row1, col1, row2, col2] = @getBoxRowCol()
+        rows = row2-row1 + 1
+        cols = col2 - col1
         s = @box.style
-        s.left   = (col1 * @chrWid + @pageOfsX  ) + 'px'
-        s.top    = (row1 * @chrHgt + @editorPosY) + 'px'
-        s.width  = ((col2-col1)   * @chrWid) + 'px'
-        s.height = ((row2-row1+1) * @chrHgt) + 'px'
+        if rows is 0 or cols is 0 then @setBoxVisible no; return
+        s.left   = (col1 * @chrWid + @pageOfsX) + 'px'
+        s.top    = (row1 * @chrHgt + @pageOfsY) + 'px'
+        s.width  = ((col2-col1)   * @chrWid)    + 'px'
+        s.height = ((row2-row1+1) * @chrHgt)    + 'px'
         
   keyEvent: (e) ->
     if not @selectMode then return
@@ -176,21 +174,23 @@ class BoxSelect
       when 1088 then @copyDelText yes, yes # ctrl-X
       when 1067 then @copyDelText yes, no  # ctrl-C
       when 8,46 then @copyDelText no, yes  # backspace, delete
-      when 91   then bubble = yes          # [  (search on chromebook)
+      when 27   then @clear 'restorePane'  # escape
       else
-        if code < 128 then @clear 'restorePane'
-        else bubble = yes
-        log 'unknown key pressed:', code
-    if bubble
-      e.preventDefault()
-      e.stopPropagation()
+        # needs work
+        if code isnt 91 and # [  (search key on chromebook)
+           code < 128 then @clear()
+        # log 'unknown key pressed:', code
 
+  setBoxVisible: (@boxVisible) ->
+    @box?.style.visibility = 
+      (if @boxVisible then 'visible' else 'hidden')
+    
   clear: (restorePane = no) -> 
     @cover?.style.cursor = 'auto'
-    @dragging = @selectMode = @selectedMode = no
+    @dragging = @selectMode = no
     @removeBoxEle()
-    if restorePane then @pane.activate()
-    log 'cleared'
+    # if restorePane then @pane.activate()
+    @pane.activate()
 
   paste: ->  
     log 'paste' 
