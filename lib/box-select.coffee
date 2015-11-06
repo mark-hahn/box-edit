@@ -31,11 +31,43 @@ class BoxSelect
                   
     @selectMode = yes
     @addBoxEle()
+    @setBoxForAtomRanges()
     @cover.style.cursor = 'crosshair'
     @pane.onDidChangeActiveItem => @clear()
     document.body.onkeydown = (e) => @keyEvent e
     @undoBuffers = []
     @undoBoxes   = []
+
+  hideAtomCursors: (destroy = no) ->
+    for sel in @editor.getSelections()
+      sel.clear()
+    for cursor in @editor.getCursors()
+      if destroy then cursor.destroy()
+      else cursor.setVisible no
+      
+  showAtomCursors: ->
+    for cursor in @editor.getCursors()
+      cursor.setVisible yes
+  
+  setBoxForAtomRanges: ->
+    range = @editor.getLastSelection().getBufferRange()
+    [row1, col1, row2, col2] = [
+      range.start.row
+      range.start.column
+      range.end.row
+      range.end.col
+    ]
+    selRanges = []
+    for sel in @editor.getSelections()
+      selRanges.push sel.getBufferRange()
+    selRanges.sort (r1, r2) -> r1.compare r2
+    for range in selRanges
+      row1 = Math.min row1, range.start.row
+      col1 = Math.min col1, range.start.column
+      row2 = Math.max row2, range.end.row
+      col2 = Math.min col2, range.end.column
+    @hideAtomCursors()
+    @setBoxRowCol [row1, col1, row2, col2]
   
   addBoxEle: ->
     c = @cover = document.createElement 'div'
