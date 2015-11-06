@@ -28,15 +28,18 @@ class BoxSelect
     {left:  @editorPosX, top:    @editorPosY, \
      width: @editorPosW, height: @editorPosH} =
                   @editorView.getBoundingClientRect()
-                  
+    {left: @pageOfsX, top: @pageOfsY} = 
+      @editorComp.pixelPositionForMouseEvent clientX:0, clientY:0
+    @pageOfsX += @editorPosX
+    @pageOfsY += @editorPosY
+    # log {@pageOfsX, @pageOfsY, @chrWid, @chrHgt, @editorPosX, @editorPosY}
     @selectMode = yes
-    @addBoxEle()
-    @setBoxForAtomRanges()
+    @atomSelToBox()
     @cover.style.cursor = 'crosshair'
     @pane.onDidChangeActiveItem => @clear()
     document.body.onkeydown = (e) => @keyEvent e
-    @undoBuffers = []
-    @undoBoxes   = []
+    @undoBuffers    = []
+    @undoBoxRowCols = []
 
   hideAtomCursors: (destroy = no) ->
     for sel in @editor.getSelections()
@@ -49,25 +52,18 @@ class BoxSelect
     for cursor in @editor.getCursors()
       cursor.setVisible yes
   
-  setBoxForAtomRanges: ->
-    range = @editor.getLastSelection().getBufferRange()
-    [row1, col1, row2, col2] = [
-      range.start.row
-      range.start.column
-      range.end.row
-      range.end.col
-    ]
-    selRanges = []
+  atomSelToBox: ->
+    row1 = col1 = +Infinity
+    row2 = col2 = -Infinity
     for sel in @editor.getSelections()
-      selRanges.push sel.getBufferRange()
-    selRanges.sort (r1, r2) -> r1.compare r2
-    for range in selRanges
-      row1 = Math.min row1, range.start.row
-      col1 = Math.min col1, range.start.column
-      row2 = Math.max row2, range.end.row
-      col2 = Math.min col2, range.end.column
-    @hideAtomCursors()
-    @setBoxRowCol [row1, col1, row2, col2]
+      range = sel.getBufferRange()
+      row1 = Math.min row1, range.start.row,    range.end.row
+      col1 = Math.min col1, range.start.column, range.end.column
+      row2 = Math.max row2, range.start.row,    range.end.row
+      col2 = Math.max col2, range.start.column, range.end.column
+    @addBoxEle()
+    # log 'atomSelToBox', {row1, col1, row2, col2}
+    @setBoxRowCol row1, col1, row2, col2
   
   addBoxEle: ->
     c = @cover = document.createElement 'div'
@@ -95,45 +91,43 @@ class BoxSelect
   setBoxVisible: (@boxVisible) ->
     @box?.style.visibility = 
       (if @boxVisible then 'visible' else 'hidden')
-    
-  getScreenRowCol: (x, y) ->
-    row = Math.round y / @chrHgt
-    row = Math.max 0, Math.min @buffer.getLastRow(), row
-    col = Math.round x / @chrWid
-    [row, col]
 
-  getBoxRowCol: ->
-    evt1Pos = @editorComp.pixelPositionForMouseEvent @initMouseEvent
-    evt2Pos = @editorComp.pixelPositionForMouseEvent @lastMouseEvent
-    {left: x1, top: y1} = evt1Pos
-    {left: x2, top: y2} = evt2Pos
-    @pageOfsX = @initMouseEvent.pageX - @editorPosX - x1
-    @pageOfsY = @initMouseEvent.pageY - @editorPosY - y1
+  xyToRowCol: (x1, y1, x2, y2) ->
     if x1 > x2 then [x2, x1] = [x1, x2]
     if y1 > y2 then [y2, y1] = [y1, y2]
-    [row1, col1] = @getScreenRowCol x1, y1
-    [row2, col2] = @getScreenRowCol x2, y2
-    row2 -= 1
+    botRow = @buffer.getLastRow()
+    row1 = Math.max      0, Math.round (y1+@pageOfsY) / @chrHgt
+    col1 = Math.max      0, Math.round (x1+@pageOfsX) / @chrWid
+    row2 = Math.min(botRow, Math.round (y2+@pageOfsY) / @chrHgt) - 1
+    col2 = Math.min botRow, Math.round (x2+@pageOfsX) / @chrHgt
     [row1, col1, row2, col2]
+
+  rowColToXY: (row1, col1, row2, col2) ->
+    # log 'rowColToXY', {row1, @chrHgt, @pageOfsY, x: row1   * @chrHgt, res: row1   * @chrHgt - @pageOfsY}
+    [col1 * @chrWid - @pageOfsX,  row1   * @chrHgt - @pageOfsY,
+     col2 * @chrWid - @pageOfsX, (row2+1)* @chrHgt - @pageOfsY]
+
+  getBoxRowCol: -> @xyToRowCol @boxX1, @boxY1, @boxX2, @boxY2
   
-  setBoxRowCol: (rowCol) ->
-    @setBoxVisible yes
-    [row1, col1, row2, col2] = rowCol
+  setBoxRowCol: (row1, col1, row2, col2) ->
+    # log 'setBoxRowCol', {row1, col1, row2, col2}
+    [x1, y1, x2, y2] = @rowColToXY row1, col1, row2, col2
     s = @box.style
-    s.left = (col1 * @chrWid + @pageOfsX) + 'px'
-    s.top  = (row1 * @chrHgt + @pageOfsY) + 'px'
-    if (row2-row1) > 0 or (col2 - col1) > 0
-      s.width  = ((col2-col1)   * @chrWid) + 'px'
-      s.height = ((row2-row1+1) * @chrHgt) + 'px'
+    s.left = x1 + 'px'
+    s.top  = y1 + 'px'
+    if (x2-x1) > 0 or (y2-y1) > 0
+      s.width  = (x2-x1) + 'px'
+      s.height = (y2-y1) + 'px'
     else
       s.width  = '0'
       s.height = @chrHgt + 'px'
+    @setBoxVisible yes
   
   copyDelFillPaste: (cmd, chr) ->
     [row1, col1, row2, col2] = @getBoxRowCol()
     if cmd isnt 'copy'
       @undoBuffers.push @editor.getText()
-      @undoBoxes.push [row1, col1, row2, col2]
+      @undoBoxRowCols.push [row1, col1, row2, col2]
     if cmd is 'paste'  
       clipTxt = atom.clipboard.read()
       clipLines = clipTxt.split '\n'
@@ -160,33 +154,29 @@ class BoxSelect
     if cmd is 'copy'  then atom.clipboard.write copyText.join '\n'
     newCol2 = col1 + (if cmd is 'paste' then clipWidth else 0)
     if cmd in ['cut', 'del', 'paste']
-      @setBoxRowCol [row1, col1, row2, newCol2]
+      @setBoxRowCol row1, col1, row2, newCol2
     
-  mouseInEditor: (e) ->
-    @editorPosX <= e.pageX < @editorPosX + @editorPosW and
-    @editorPosY <= e.pageY < @editorPosY + @editorPosH
-
   mouseEvent: (e) ->
     if not @selectMode then return
     
     switch e.type
-      
       when 'mousedown'
         @setBoxVisible no
-        @initMouseEvent = @lastMouseEvent = e
         @dragging = yes
-        @initPosX = e.pageX - @editorPosX
-        @initPosY = e.pageY - @editorPosY
+        @boxX1 = e.pageX - @editorPosX
+        @boxY1 = e.pageY - @editorPosY
       
       when 'mousemove' 
         if not @dragging then return
-        @lastMouseEvent = e
-        @setBoxRowCol @getBoxRowCol()
+        @boxX2 = e.pageX - @editorPosX
+        @boxY2 = e.pageY - @editorPosY
+        @setBoxRowCol @getBoxRowCol()...
       
       when 'mouseup'
         @dragging = no
-        @lastMouseEvent = e
-        @setBoxRowCol @getBoxRowCol()
+        @boxX2 = e.pageX - @editorPosX
+        @boxY2 = e.pageY - @editorPosY
+        @setBoxRowCol @getBoxRowCol()...
         
   keyEvent: (e) ->
     if not @selectMode then return
@@ -225,7 +215,7 @@ class BoxSelect
       when 'Ctrl-Z'  
         if (oldBuf = @undoBuffers.pop())
           @editor.setText oldBuf
-          @setBoxRowCol @undoBoxes.pop()
+          @setBoxRowCol @undoBoxRowCols.pop()...
       else log 'key not used by box-select:', codeStr
         
   clear: -> 
@@ -233,7 +223,7 @@ class BoxSelect
     @dragging = @selectMode = no
     @removeBoxEle()
     @pane.activate()
-    @undoBuffers = @undoBoxes = null
+    @undoBuffers = @undoBoxRowCols = null
 
   deactivate: ->
     @clear()
