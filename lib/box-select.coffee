@@ -31,71 +31,11 @@ class BoxSelect
                   
     @selectMode = yes
     @addBoxEle()
-    @setBoxForAtomRanges()
     @cover.style.cursor = 'crosshair'
-    
     @pane.onDidChangeActiveItem => @clear()
     document.body.onkeydown = (e) => @keyEvent e
-  
-  setBoxPos: (rowCol) ->
-    @setBoxVisible yes
-    [row1, col1, row2, col2] = rowCol
-    s = @box.style
-    s.left = (col1 * @chrWid + @pageOfsX) + 'px'
-    s.top  = (row1 * @chrHgt + @pageOfsY) + 'px'
-    if (row2-row1) > 0 or (col2 - col1) > 0
-      s.width  = ((col2-col1)   * @chrWid) + 'px'
-      s.height = ((row2-row1+1) * @chrHgt) + 'px'
-    else
-      s.width  = '0'
-      s.height = @chrHgt + 'px'
-
-  setBoxForAtomRanges: ->
-    selRanges = []
-    for sel in @editor.getSelections()
-      selRanges.push sel.getBufferRange()
-    selRanges.sort (r1, r2) -> r1.compare r2
-    activeRange = @editor.getLastSelection().getBufferRange()
-    initialRanges = null
-    chkRangeBox = (rangesInBox) ->
-      for range in rangesInBox
-        if range.compare(activeRange) is 0
-          initialRanges = rangesInBox
-          break
-    rangesInBox = []
-    for i in [1...selRanges.length]
-      thisRange = selRanges[i]
-      lastRange = selRanges[i-1]
-      rangesMatch = no
-      if thisRange.start.row is lastRange.start.row + 1 and
-         thisRange.start.col is lastRange.start.col
-          endColMatches = thisRange.end.col is lastRange.end.col
-          if endColMatches then rangesEndCol = lastRange.end.col
-          else
-            if thisRange.end.col > lastRange.end.col
-              excessTxt = getTextInBufferRange(thisRange)[lastRange.end.col...thisRange.end.col]
-              rangesEndCol = thisRange.end.col
-            else
-              excessTxt = getTextInBufferRange(lastRange)[thisRange.end.col...lastRange.end.col]
-              rangesEndCol = lastRange.end.col
-            if /^\s+$/.test excessTxt then endColMatches = yes
-          if endColMatches    
-           if rangesInBox.length is 0
-             rangesInBox.push lastRange
-           rangesInBox.push thisRange
-           rangesMatch = yes
-      if not rangesMatch
-        if rangesInBox.length
-          chkRangeBox rangesInBox
-          if initialRanges then break
-        rangesInBox = []
-    chkRangeBox rangesInBox
-    if not initialRanges then initialRanges = [activeRange]
-    col1 = initialRanges[0].start.col
-    row1 = initialRanges[0].start.row
-    col2 = rangesEndCol
-    row2 = initialRanges.pop().start.row
-    @setBoxPos [row1, col1, row2, col2]
+    @undoBuffers = []
+    @undoBoxes   = []
   
   addBoxEle: ->
     c = @cover = document.createElement 'div'
@@ -120,6 +60,10 @@ class BoxSelect
       @cover.removeChild @box
       @cover = @box = null
       
+  setBoxVisible: (@boxVisible) ->
+    @box?.style.visibility = 
+      (if @boxVisible then 'visible' else 'hidden')
+    
   getScreenRowCol: (x, y) ->
     row = Math.round y / @chrHgt
     row = Math.max 0, Math.min @buffer.getLastRow(), row
@@ -140,23 +84,52 @@ class BoxSelect
     row2 -= 1
     [row1, col1, row2, col2]
   
-  copyDelFillText: (copy, del, fillChr) ->
-    copyText = []; lastBufRow = null; fillStr = ''
+  setBoxRowCol: (rowCol) ->
+    @setBoxVisible yes
+    [row1, col1, row2, col2] = rowCol
+    s = @box.style
+    s.left = (col1 * @chrWid + @pageOfsX) + 'px'
+    s.top  = (row1 * @chrHgt + @pageOfsY) + 'px'
+    if (row2-row1) > 0 or (col2 - col1) > 0
+      s.width  = ((col2-col1)   * @chrWid) + 'px'
+      s.height = ((row2-row1+1) * @chrHgt) + 'px'
+    else
+      s.width  = '0'
+      s.height = @chrHgt + 'px'
+  
+  copyDelFillPaste: (cmd, chr) ->
     [row1, col1, row2, col2] = @getBoxRowCol()
-    if fillChr then for i in [col1...col2] then fillStr += fillChr
+    if cmd isnt 'copy'
+      @undoBuffers.push @editor.getText()
+      @undoBoxes.push [row1, col1, row2, col2]
+    if cmd is 'paste'  
+      clipTxt = atom.clipboard.read()
+      clipLines = clipTxt.split '\n'
+      clipWidth = 0
+      for clipLine in clipLines 
+        clipWidth = Math.max clipWidth, clipLine.length
+    copyText = []; lastBufRow = null; fillStr = ''
+    if cmd is 'fill' then for i in [col1...col2] then fillStr += chr
+    rowIdx = 0
     for row in [row1..row2]
       bufRange = @editor.bufferRangeForScreenRange [[row, col1], [row, col2]]
       bufRow  = bufRange.start.row
       bufCol1 = bufRange.start.column
       if bufRow is lastBufRow then continue
       lastBufRow = bufRow
-      if copy then copyText.push @editor.getTextInBufferRange bufRange
-      if del or fillChr then @editor.setTextInBufferRange bufRange, fillStr
-    if copy then atom.clipboard.write copyText.join '\n'
+      if cmd in ['copy', 'cut'] 
+        copyText.push @editor.getTextInBufferRange bufRange
+      if cmd is 'paste'
+        fillStr = clipLines[rowIdx] ? ''
+        while fillStr.length < clipWidth then fillStr += ' '
+      if cmd in ['cut', 'del', 'fill', 'paste']
+        @editor.setTextInBufferRange bufRange, fillStr
+      rowIdx++
+    if cmd is 'copy'  then atom.clipboard.write copyText.join '\n'
+    newCol2 = col1 + (if cmd is 'paste' then clipWidth else 0)
+    if cmd in ['cut', 'del', 'paste']
+      @setBoxRowCol [row1, col1, row2, newCol2]
     
-  paste: ->
-    
-  
   mouseInEditor: (e) ->
     @editorPosX <= e.pageX < @editorPosX + @editorPosW and
     @editorPosY <= e.pageY < @editorPosY + @editorPosH
@@ -167,9 +140,6 @@ class BoxSelect
     switch e.type
       
       when 'mousedown'
-        if not @mouseInEditor e
-          @clear()
-          return
         @setBoxVisible no
         @initMouseEvent = @lastMouseEvent = e
         @dragging = yes
@@ -177,21 +147,17 @@ class BoxSelect
         @initPosY = e.pageY - @editorPosY
       
       when 'mousemove' 
-        if not @dragging or 
-           not @mouseInEditor(e) 
-          return
+        if not @dragging then return
         @lastMouseEvent = e
-        @setBoxPos @getBoxRowCol()
+        @setBoxRowCol @getBoxRowCol()
       
       when 'mouseup'
         @dragging = no
-        if @mouseInEditor(e) 
-          @lastMouseEvent = e
-        @setBoxPos @getBoxRowCol()
+        @lastMouseEvent = e
+        @setBoxRowCol @getBoxRowCol()
         
   keyEvent: (e) ->
     if not @selectMode then return
-    
     hasModifier = (e.shiftKey or e.ctrlKey or e.altKey or e.metaKey)
     codeStr = e.keyIdentifier
     if codeStr[0..1] is 'U+'
@@ -205,12 +171,13 @@ class BoxSelect
         when 127 then codeStr = 'Delete'
         else
           asciiPrintable = (32 <= code < 127)
-          if e.shiftKey and asciiPrintable then hasModifier = no
+          if e.shiftKey  and asciiPrintable     then hasModifier = no
           if hasModifier and not asciiPrintable then return
           codeStr = String.fromCharCode code
           if not e.shiftKey then codeStr = codeStr.toLowerCase()
           if hasModifier    then codeStr = codeStr.toUpperCase()
-          else @copyDelFillText no, no, codeStr; return
+          else @copyDelFillPaste 'fill', codeStr; return
+            
     if e.metaKey  then codeStr = 'Meta-'  + codeStr
     if e.shiftKey and hasModifier 
                        codeStr = 'Shift-' + codeStr
@@ -218,27 +185,23 @@ class BoxSelect
     if e.ctrlKey  then codeStr = 'Ctrl-'  + codeStr
     
     switch codeStr
-      when 'Ctrl-X' then @copyDelFillText yes, yes, no
-      when 'Ctrl-C' then @copyDelFillText yes,  no, no
-      when 'Ctrl-V' then @paste()
-      when 'Backspace', 'Delete' 
-                         @copyDelFillText no, yes, no
-      when 'Escape' then @clear()
+      when 'Ctrl-X'              then @copyDelFillPaste 'cut'
+      when 'Ctrl-C'              then @copyDelFillPaste 'copy'
+      when 'Ctrl-V'              then @copyDelFillPaste 'paste'
+      when 'Backspace', 'Delete' then @copyDelFillPaste 'del'
+      when 'Escape'              then @clear()
+      when 'Ctrl-Z'  
+        if (oldBuf = @undoBuffers.pop())
+          @editor.setText oldBuf
+          @setBoxRowCol @undoBoxes.pop()
       else log 'key not used by box-select:', codeStr
-    
-    # if codeStr not in ['Ctrl-W', 'Ctrl-Shift-W', 'Ctrl-Tab', 'Ctrl-Shift-Tab']
-    #   e.preventDefault()
-    #   e.stopPropagation()
-    
-  setBoxVisible: (@boxVisible) ->
-    @box?.style.visibility = 
-      (if @boxVisible then 'visible' else 'hidden')
-  
+        
   clear: -> 
     @cover?.style.cursor = 'auto'
     @dragging = @selectMode = no
     @removeBoxEle()
     @pane.activate()
+    @undoBuffers = @undoBoxes = null
 
   deactivate: ->
     @clear()
