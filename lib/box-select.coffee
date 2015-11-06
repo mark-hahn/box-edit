@@ -25,34 +25,23 @@ class BoxSelect
     @buffer     = @editor.getBuffer()
     @chrWid     = @editor.getDefaultCharWidth()
     @chrHgt     = @editor.getLineHeightInPixels()
-    {left:  @editorPosX, top:    @editorPosY, \
-     width: @editorPosW, height: @editorPosH} =
-                  @editorView.getBoundingClientRect()
-    {left: @pageOfsX, top: @pageOfsY} = 
-      @editorComp.pixelPositionForMouseEvent clientX:0, clientY:0
-    @pageOfsX += @editorPosX
-    @pageOfsY += @editorPosY
-    # log {@pageOfsX, @pageOfsY, @chrWid, @chrHgt, @editorPosX, @editorPosY}
+    {left: @editorPageX, top: @editorPageY, width: @editorW, height: @editorH} =
+                   @editorView.getBoundingClientRect()
+    {left, top}  = @editorComp.pixelPositionForMouseEvent clientX:0, clientY:0
+    @textPageX   = -left
+    @textPageY   = -top
+    @textOfsX    = @textPageX - @editorPageX  
+    @textOfsY    = @textPageY - @editorPageY 
+    
     @selectMode = yes
-    @atomSelToBox()
+    @atomSelectionsToBox()
     @cover.style.cursor = 'crosshair'
     @pane.onDidChangeActiveItem => @clear()
     document.body.onkeydown = (e) => @keyEvent e
     @undoBuffers    = []
     @undoBoxRowCols = []
 
-  hideAtomCursors: (destroy = no) ->
-    for sel in @editor.getSelections()
-      sel.clear()
-    for cursor in @editor.getCursors()
-      if destroy then cursor.destroy()
-      else cursor.setVisible no
-      
-  showAtomCursors: ->
-    for cursor in @editor.getCursors()
-      cursor.setVisible yes
-  
-  atomSelToBox: ->
+  atomSelectionsToBox: ->
     row1 = col1 = +Infinity
     row2 = col2 = -Infinity
     for sel in @editor.getSelections()
@@ -63,16 +52,62 @@ class BoxSelect
       col2 = Math.max col2, range.start.column, range.end.column
     @addBoxEle()
     # log 'atomSelToBox', {row1, col1, row2, col2}
-    @setBoxRowCol row1, col1, row2, col2
-  
+    @setBoxByRowCol row1, col1, row2, col2
+    for selection in @editor.getSelections()
+      selection.destroy()
+    @editor.getLastCursor().setVisible no
+    
+  bufferOperation: (cmd, chr) ->
+    oldBufferText = @editor.getText()
+    oldRowCol = [row1, col1, row2, col2] = @getBoxRowCol()
+    log 'bufferOperation', {row1, col1, row2, col2}
+    if cmd is 'paste'  
+      clipTxt = atom.clipboard.read()
+      clipLines = clipTxt.split '\n'
+      clipWidth = 0
+      for clipLine in clipLines 
+        clipWidth = Math.max clipWidth, clipLine.length
+    copyText = []; lastBufRow = null; fillStr = ''
+    if cmd is 'fill' then for i in [col1...col2] then fillStr += chr
+    rowIdx = 0
+    for row in [row1..row2]
+      bufRange = @editor.bufferRangeForScreenRange [[row, col1], [row, col2]]
+      bufRow   = bufRange.start.row
+      if bufRow is lastBufRow then continue
+      lastBufRow = bufRow
+      if cmd in ['copy', 'cut'] 
+        copyText.push @editor.getTextInBufferRange bufRange
+      if cmd is 'paste'
+        fillStr = clipLines[rowIdx] ? ''
+        while fillStr.length < clipWidth then fillStr += ' '
+      if cmd in ['cut', 'del', 'fill', 'paste']
+        @editor.setTextInBufferRange bufRange, fillStr
+      rowIdx++
+    if cmd is 'copy'  then atom.clipboard.write copyText.join '\n'
+    
+    newCol2 = col1 + (if cmd is 'paste' then clipWidth else 0)
+    if cmd in ['cut', 'del', 'paste']
+      @setBoxByRowCol row1, col1, row2, newCol2
+    
+    if @editor.getText() isnt oldBufferText
+      @undoBuffers.push oldBufferText
+      @undoBoxRowCols.push oldRowCol
+    
+  boxToAtomSelections: ->
+    oldSelection = @editor.getLastSelection()
+    [row1, col1, row2, col2] = @getBoxRowCol()
+    for row in [row1..row2]
+      @editor.addSelectionForBufferRange [[row, col1], [row, col2]]
+    oldSelection.destroy()
+          
   addBoxEle: ->
     c = @cover = document.createElement 'div'
     c.id = 'boxsel-cover'
     s = c.style
-    s.left   = @editorPosX + 'px'
-    s.top    = @editorPosY + 'px'
-    s.width  = @editorPosW + 'px'
-    s.height = @editorPosH + 'px'
+    s.left   = @editorPageX + 'px'
+    s.top    = @editorPageY + 'px'
+    s.width  = @editorW + 'px'
+    s.height = @editorH + 'px'
     setTimeout (-> s.cursor = 'crosshair'), 50
     b = @box = document.createElement 'div'
     b.id     = 'boxsel-box'
@@ -92,29 +127,18 @@ class BoxSelect
     @box?.style.visibility = 
       (if @boxVisible then 'visible' else 'hidden')
 
-  xyToRowCol: (x1, y1, x2, y2) ->
-    if x1 > x2 then [x2, x1] = [x1, x2]
-    if y1 > y2 then [y2, y1] = [y1, y2]
-    botRow = @buffer.getLastRow()
-    row1 = Math.max      0, Math.round (y1+@pageOfsY) / @chrHgt
-    col1 = Math.max      0, Math.round (x1+@pageOfsX) / @chrWid
-    row2 = Math.min(botRow, Math.round (y2+@pageOfsY) / @chrHgt) - 1
-    col2 = Math.min botRow, Math.round (x2+@pageOfsX) / @chrHgt
-    [row1, col1, row2, col2]
-
-  rowColToXY: (row1, col1, row2, col2) ->
-    # log 'rowColToXY', {row1, @chrHgt, @pageOfsY, x: row1   * @chrHgt, res: row1   * @chrHgt - @pageOfsY}
-    [col1 * @chrWid - @pageOfsX,  row1   * @chrHgt - @pageOfsY,
-     col2 * @chrWid - @pageOfsX, (row2+1)* @chrHgt - @pageOfsY]
-
-  getBoxRowCol: -> @xyToRowCol @boxX1, @boxY1, @boxX2, @boxY2
-  
-  setBoxRowCol: (row1, col1, row2, col2) ->
-    # log 'setBoxRowCol', {row1, col1, row2, col2}
-    [x1, y1, x2, y2] = @rowColToXY row1, col1, row2, col2
+  setBoxByXY: (x1, y1, x2, y2, snap2grid = yes) ->
+    # log 'setBoxByXY', {x1, y1, x2, y2}
+    if snap2grid
+      x1 = Math.round(x1/@chrWid) * @chrWid
+      y1 = Math.round(y1/@chrHgt) * @chrHgt
+      x2 = Math.round(x2/@chrWid) * @chrWid
+      y2 = Math.round(y2/@chrHgt) * @chrHgt
+    if x1 > x2 then [x1, x2] = [x2, x1]
+    if y1 > y2 then [y1, y2] = [y2, y1]
     s = @box.style
-    s.left = x1 + 'px'
-    s.top  = y1 + 'px'
+    s.left = (x1 + @textOfsX) + 'px'
+    s.top  = (y1 + @textOfsY) + 'px'
     if (x2-x1) > 0 or (y2-y1) > 0
       s.width  = (x2-x1) + 'px'
       s.height = (y2-y1) + 'px'
@@ -122,61 +146,49 @@ class BoxSelect
       s.width  = '0'
       s.height = @chrHgt + 'px'
     @setBoxVisible yes
-  
-  copyDelFillPaste: (cmd, chr) ->
-    [row1, col1, row2, col2] = @getBoxRowCol()
-    if cmd isnt 'copy'
-      @undoBuffers.push @editor.getText()
-      @undoBoxRowCols.push [row1, col1, row2, col2]
-    if cmd is 'paste'  
-      clipTxt = atom.clipboard.read()
-      clipLines = clipTxt.split '\n'
-      clipWidth = 0
-      for clipLine in clipLines 
-        clipWidth = Math.max clipWidth, clipLine.length
-    copyText = []; lastBufRow = null; fillStr = ''
-    if cmd is 'fill' then for i in [col1...col2] then fillStr += chr
-    rowIdx = 0
-    for row in [row1..row2]
-      bufRange = @editor.bufferRangeForScreenRange [[row, col1], [row, col2]]
-      bufRow  = bufRange.start.row
-      bufCol1 = bufRange.start.column
-      if bufRow is lastBufRow then continue
-      lastBufRow = bufRow
-      if cmd in ['copy', 'cut'] 
-        copyText.push @editor.getTextInBufferRange bufRange
-      if cmd is 'paste'
-        fillStr = clipLines[rowIdx] ? ''
-        while fillStr.length < clipWidth then fillStr += ' '
-      if cmd in ['cut', 'del', 'fill', 'paste']
-        @editor.setTextInBufferRange bufRange, fillStr
-      rowIdx++
-    if cmd is 'copy'  then atom.clipboard.write copyText.join '\n'
-    newCol2 = col1 + (if cmd is 'paste' then clipWidth else 0)
-    if cmd in ['cut', 'del', 'paste']
-      @setBoxRowCol row1, col1, row2, newCol2
-    
+
+  setBoxByRowCol: (row1, col1, row2, col2) ->
+    # log 'setBoxByRowCol', {row1, col1, row2, col2}
+    @setBoxByXY col1 * @chrWid,  row1    * @chrHgt, 
+                col2 * @chrWid, (row2+1) * @chrHgt, no
+
+  getBoxRowCol: -> 
+    s = @box.style
+    style2dim = (attr) -> +(s[attr].replace 'px', '')
+    x1 = style2dim('left') - @textOfsX
+    y1 = style2dim('top')  - @textOfsY
+    x2 = x1 + style2dim 'width'
+    y2 = y1 + style2dim 'height'
+    botRow = @buffer.getLastRow()
+    row1 = Math.max      0,  Math.round y1 / @chrHgt
+    col1 = Math.max      0,  Math.round x1 / @chrWid
+    row2 = Math.min botRow, (Math.round y2 / @chrHgt) - 1
+    col2 =                   Math.round x2 / @chrWid
+    log 'getBoxRowCol', {x1, y1, x2, y2, row1, col1, row2, col2}
+    [row1, col1, row2, col2]
+
   mouseEvent: (e) ->
     if not @selectMode then return
     
     switch e.type
       when 'mousedown'
+        @mouseIsDown = yes
+        @initX1 = e.pageX - @textPageX
+        @initY1 = e.pageY - @textPageY
         @setBoxVisible no
-        @dragging = yes
-        @boxX1 = e.pageX - @editorPosX
-        @boxY1 = e.pageY - @editorPosY
       
       when 'mousemove' 
-        if not @dragging then return
-        @boxX2 = e.pageX - @editorPosX
-        @boxY2 = e.pageY - @editorPosY
-        @setBoxRowCol @getBoxRowCol()...
+        if not @mouseIsDown then return
+        x2 = e.pageX - @textPageX
+        y2 = e.pageY - @textPageY
+        @setBoxByXY @initX1, @initY1, x2, y2
       
       when 'mouseup'
-        @dragging = no
-        @boxX2 = e.pageX - @editorPosX
-        @boxY2 = e.pageY - @editorPosY
-        @setBoxRowCol @getBoxRowCol()...
+        if not @mouseIsDown then return
+        @mouseIsDown = no
+        x2 = e.pageX - @textPageX
+        y2 = e.pageY - @textPageY
+        @setBoxByXY @initX1, @initY1, x2, y2
         
   keyEvent: (e) ->
     if not @selectMode then return
@@ -198,7 +210,7 @@ class BoxSelect
           codeStr = String.fromCharCode code
           if not e.shiftKey then codeStr = codeStr.toLowerCase()
           if hasModifier    then codeStr = codeStr.toUpperCase()
-          else @copyDelFillPaste 'fill', codeStr; return
+          else @bufferOperation 'fill', codeStr; return
             
     if e.metaKey  then codeStr = 'Meta-'  + codeStr
     if e.shiftKey and hasModifier 
@@ -207,23 +219,28 @@ class BoxSelect
     if e.ctrlKey  then codeStr = 'Ctrl-'  + codeStr
     
     switch codeStr
-      when 'Ctrl-X'              then @copyDelFillPaste 'cut'
-      when 'Ctrl-C'              then @copyDelFillPaste 'copy'
-      when 'Ctrl-V'              then @copyDelFillPaste 'paste'
-      when 'Backspace', 'Delete' then @copyDelFillPaste 'del'
+      when 'Ctrl-X'              then @bufferOperation 'cut'
+      when 'Ctrl-C'              then @bufferOperation 'copy'
+      when 'Ctrl-V'              then @bufferOperation 'paste'
+      when 'Backspace', 'Delete' then @bufferOperation 'del'
       when 'Escape'              then @clear()
       when 'Ctrl-Z'  
         if (oldBuf = @undoBuffers.pop())
           @editor.setText oldBuf
-          @setBoxRowCol @undoBoxRowCols.pop()...
-      else log 'key not used by box-select:', codeStr
+          @setBoxByRowCol @undoBoxRowCols.pop()...
+      else 
+        log 'key not used by box-select:', codeStr
+        return
+        
+    e.stopPropagation()
+    e.preventDefault()
         
   clear: -> 
-    @cover?.style.cursor = 'auto'
-    @dragging = @selectMode = no
+    @boxToAtomSelections()
     @removeBoxEle()
-    @pane.activate()
+    @mouseIsDown = @selectMode = no
     @undoBuffers = @undoBoxRowCols = null
+    @pane.activate()
 
   deactivate: ->
     @clear()
