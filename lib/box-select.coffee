@@ -16,13 +16,27 @@ class BoxSelect
                                 'box-select:toggle': => @toggle()
   
   toggle: ->
-    if @selectMode then @clear(); return  
-    if not (@editor = @wspace.getActiveTextEditor()) then @clear(); return 
+    if @selectMode or
+         not (@editor = @wspace.getActiveTextEditor()) or @editor.isDestroyed()
+      @clear()
+      return 
+    @selectMode = yes
+    @getAtomReferences()
+    @getDisplayConstants()
+    @createBoxWithAtomSelections()
+    @pane.onDidChangeActiveItem    => @clear()
+    document.body.onkeydown  = (e) => @keyDown  e
+    document.body.onkeypress = (e) => @keyPress e
+    @undoBuffers    = []
+    @undoBoxRowCols = []
     
+  getAtomReferences: ->
     @pane       = @wspace.getActivePane()
     @editorView = atom.views.getView @editor
     @editorComp = @editorView.component
     @buffer     = @editor.getBuffer()
+    
+  getDisplayConstants: ->
     @chrWid     = @editor.getDefaultCharWidth()
     @chrHgt     = @editor.getLineHeightInPixels()
     {left: @editorPageX, top: @editorPageY, width: @editorW, height: @editorH} =
@@ -33,15 +47,7 @@ class BoxSelect
     @textOfsX    = @textPageX - @editorPageX  
     @textOfsY    = @textPageY - @editorPageY 
     
-    @selectMode = yes
-    @atomSelectionsToBox()
-    @cover.style.cursor = 'crosshair'
-    @pane.onDidChangeActiveItem => @clear()
-    document.body.onkeydown = (e) => @keyEvent e
-    @undoBuffers    = []
-    @undoBoxRowCols = []
-    
-  atomSelectionsToBox: ->
+  createBoxWithAtomSelections: ->
     row1 = col1 = +Infinity
     row2 = col2 = -Infinity
     for sel in @editor.getSelections()
@@ -55,15 +61,21 @@ class BoxSelect
     for selection in @editor.getSelections()
       selection.destroy()
     @editor.getLastCursor().setVisible no
-  
-  ensureLineLen: (bufRow, length) ->
-    log 'ensureLineLen', {bufRow, length}
+    
+  ensureScreenHgt: (scrnRows) ->
+    loop
+      endScrnRange = @editor.screenRangeForBufferRange [[9e9,9e9],[9e9,9e9]]
+      if endScrnRange.end.row >= scrnRows - 1 then return
+      @editor.setTextInBufferRange [[9e9,9e9],[9e9,9e9]], '\n'
+
+  ensureLineWid: (bufRow, length) ->
     lineLen = @editor.lineTextForBufferRow(bufRow).length
     if lineLen < length
       pad = ' '; for i in [1...length-lineLen] then pad += ' '
       @editor.setTextInBufferRange [[bufRow,lineLen],[bufRow,length]], pad
-      
+  
   bufferOperation: (cmd, chr) ->
+    # log 'bufferOperation', {cmd, chr}
     oldBufferText = @editor.getText()
     oldRowCol = [row1, col1, row2, col2] = @getBoxRowCol()
     
@@ -73,7 +85,7 @@ class BoxSelect
       clipLines = clipTxt.split '\n'
       if clipLines[clipLines.length-1].length is 0
         clipLines = clipLines[0..-2]
-      clipHgt   = clipLines.length
+      clipHgt = clipLines.length
       clipWidth = 0
       for clipLine in clipLines 
         clipWidth = Math.max clipWidth, clipLine.length
@@ -83,31 +95,37 @@ class BoxSelect
       while blankClipLine.length < clipWidth then blankClipLine += ' '
       getClipLine = (clipRow) ->
         (if clipRow < clipHgt then clipLines[clipRow] else blankClipLine)
-        
+    
+    if cmd isnt 'copy'
+      @ensureScreenHgt Math.max row2, row1 + clipHgt
+    
+    dbg = 0
     screenRow = row1
     boxRow = 0; boxLine = ''
     if cmd is 'fill' then for i in [col1...col2] then boxLine += chr
     boxHgt = row2 - row1 + 1
-    copyText = ''; lastBufRow = 0
+    copyText = ''; lastBufRow = null
     
     while boxRow <= boxHgt-1 or
           cmd is 'paste' and boxRow <= clipHgt-1
       bufRange = 
         @editor.bufferRangeForScreenRange [[screenRow,col1],[screenRow,col2]]
       bufRow = bufRange.start.row
-      @ensureLineLen bufRow, col1
+      @ensureLineWid bufRow, col1
       bufRange = 
         @editor.bufferRangeForScreenRange [[screenRow,col1],[screenRow,col2]]
       screenRow++
+      if ++dbg > 30 then log 'oops'; return
       if bufRow is lastBufRow then continue
-      
       lastBufRow = bufRow
+      
       if cmd is 'paste' 
         @editor.setTextInBufferRange bufRange, getClipLine boxRow
       else if boxRow <= boxHgt-1
         if cmd in ['copy', 'cut'] 
           copyText += @editor.getTextInBufferRange(bufRange) + '\n'
         if cmd in ['cut', 'del', 'fill']
+          # log 'bufRange cut, del, fill', bufRange, boxLine, @editor.getTextInBufferRange(bufRange)
           @editor.setTextInBufferRange bufRange, boxLine
       boxRow++
     
@@ -199,11 +217,13 @@ class BoxSelect
     col1 = Math.max      0,  Math.round x1 / @chrWid
     row2 = Math.min botRow, (Math.round y2 / @chrHgt) - 1
     col2 =                   Math.round x2 / @chrWid
-    log 'getBoxRowCol', {row1, col1, row2, col2}
+    # log 'getBoxRowCol', {row1, col1, row2, col2}
     [row1, col1, row2, col2]
 
   mouseEvent: (e) ->
-    if not @selectMode then return
+    if not @selectMode or not @editor or @editor.isDestroyed()
+      @clear()
+      return
     
     switch e.type
       when 'mousedown'
@@ -229,35 +249,16 @@ class BoxSelect
         x2 = e.pageX - @textPageX
         y2 = e.pageY - @textPageY
         @setBoxByXY @initX1, @initY1, x2, y2
-        
-  keyEvent: (e) ->
-    if not @selectMode then return
-    hasModifier = (e.shiftKey or e.ctrlKey or e.altKey or e.metaKey)
-    codeStr = e.keyIdentifier
-    if codeStr[0..1] is 'U+'
-      code = parseInt codeStr[2..5], 16
-      switch code
-        when   8 then codeStr = 'Backspace'
-        when   9 then codeStr = 'Tab'
-        when  10 then codeStr = 'LineFeed'
-        when  13 then codeStr = 'Return'
-        when  27 then codeStr = 'Escape'
-        when 127 then codeStr = 'Delete'
-        else
-          asciiPrintable = (32 <= code < 127)
-          if e.shiftKey  and asciiPrintable     then hasModifier = no
-          if hasModifier and not asciiPrintable then return
-          codeStr = String.fromCharCode code
-          if not e.shiftKey then codeStr = codeStr.toLowerCase()
-          if hasModifier    then codeStr = codeStr.toUpperCase()
-          else @bufferOperation 'fill', codeStr; return
-            
-    if e.metaKey  then codeStr = 'Meta-'  + codeStr
-    if e.shiftKey and hasModifier 
-                       codeStr = 'Shift-' + codeStr
-    if e.altKey   then codeStr = 'Alt-'   + codeStr
-    if e.ctrlKey  then codeStr = 'Ctrl-'  + codeStr
-    
+
+  keyChar: (e, chr) ->
+    log 'keyChar', chr.charCodeAt(0), chr
+    if chr.charCodeAt(0) > 32
+      @bufferOperation 'fill', chr
+    e.stopPropagation()
+    e.preventDefault()
+
+  keyAction: (e, codeStr) ->    
+    log 'keyAction', codeStr
     switch codeStr
       when 'Ctrl-X'              then @bufferOperation 'cut'
       when 'Ctrl-C'              then @bufferOperation 'copy'
@@ -269,22 +270,60 @@ class BoxSelect
           @editor.setText oldBuf
           @setBoxByRowCol @undoBoxRowCols.pop()...
       else 
-        log 'key not used by box-select:', codeStr
+        log codeStr + ' key not used'
         return
-        
     e.stopPropagation()
     e.preventDefault()
-        
-  clear: -> 
-    @boxToAtomSelections()
+
+  addModifier: (e, codeStr) ->
+    if e.metaKey  then codeStr = 'Meta-'  + codeStr
+    if e.shiftKey then codeStr = 'Shift-' + codeStr
+    if e.altKey   then codeStr = 'Alt-'   + codeStr
+    if e.ctrlKey  then codeStr = 'Ctrl-'  + codeStr
+    codeStr
+
+  keyDown: (e) ->
+    if not @selectMode or not @editor or @editor.isDestroyed()
+      @clear()
+      return
+    log 'keyDown', e.keyIdentifier
+    keyId = e.keyIdentifier
+    if keyId[0..1] is 'U+'
+      code = parseInt keyId[2..5], 16
+      switch code
+        when   8 then codeStr = 'Backspace'
+        when   9 then codeStr = 'Tab'
+        when  10 then codeStr = 'LineFeed'
+        when  13 then codeStr = 'Return'
+        when  27 then codeStr = 'Escape'
+        when 127 then codeStr = 'Delete'
+        else return
+    @keyAction e, @addModifier e, codeStr
+    
+  keyPress: (e) ->
+    if not @selectMode or not @editor or @editor.isDestroyed()
+      @clear()
+      return
+    log 'keyPress', e.charCode, 
+    chr = String.fromCharCode e.charCode
+    if e.ctrlKey or e.altKey or e.metaKey
+      @keyAction e, @addModifier e, chr.toUpperCase()
+    else
+      @keyChar e, chr
+          
+  clear: ->
+    haveEditor = (@editor and not @editor.isDestroyed() and 
+                    @pane and not   @pane.isDestroyed())
+    @boxToAtomSelections() if haveEditor
     @removeBoxEle()
     @mouseIsDown = @selectMode = no
     @undoBuffers = @undoBoxRowCols = null
-    @pane.activate()
+    @pane?.activate() if haveEditor
+    @pane = @editorView = @editorComp = @buffer = null
 
   deactivate: ->
     @clear()
-    @subs.dispose()
+    @subs.dispose()  
 
 module.exports = new BoxSelect
 
