@@ -250,15 +250,20 @@ class BoxSelect
         y2 = e.pageY - @textPageY
         @setBoxByXY @initX1, @initY1, x2, y2
 
-  keyChar: (e, chr) ->
-    log 'keyChar', chr.charCodeAt(0), chr
-    if chr.charCodeAt(0) > 32
+  unicodeChr: (e, chr) ->
+    # log 'unicodeChr', chr.charCodeAt(0), '"'+chr+'"'
+    if chr.charCodeAt(0) >= 32
       @bufferOperation 'fill', chr
     e.stopPropagation()
     e.preventDefault()
 
   keyAction: (e, codeStr) ->    
-    log 'keyAction', codeStr
+    if e.metaKey  then codeStr = 'Meta-'  + codeStr
+    if e.shiftKey then codeStr = 'Shift-' + codeStr
+    if e.altKey   then codeStr = 'Alt-'   + codeStr
+    if e.ctrlKey  then codeStr = 'Ctrl-'  + codeStr
+    
+    # log 'keyAction', codeStr
     switch codeStr
       when 'Ctrl-X'              then @bufferOperation 'cut'
       when 'Ctrl-C'              then @bufferOperation 'copy'
@@ -269,27 +274,22 @@ class BoxSelect
         if (oldBuf = @undoBuffers.pop())
           @editor.setText oldBuf
           @setBoxByRowCol @undoBoxRowCols.pop()...
+      # when 'Ctrl-S'              then return
       else 
         log codeStr + ' key not used'
         return
     e.stopPropagation()
     e.preventDefault()
 
-  addModifier: (e, codeStr) ->
-    if e.metaKey  then codeStr = 'Meta-'  + codeStr
-    if e.shiftKey then codeStr = 'Shift-' + codeStr
-    if e.altKey   then codeStr = 'Alt-'   + codeStr
-    if e.ctrlKey  then codeStr = 'Ctrl-'  + codeStr
-    codeStr
-
   keyDown: (e) ->
     if not @selectMode or not @editor or @editor.isDestroyed()
       @clear()
       return
-    log 'keyDown', e.keyIdentifier
+    # log 'keyDown', e.keyIdentifier
     keyId = e.keyIdentifier
     if keyId[0..1] is 'U+'
       code = parseInt keyId[2..5], 16
+      # log 'u code', code
       switch code
         when   8 then codeStr = 'Backspace'
         when   9 then codeStr = 'Tab'
@@ -298,23 +298,29 @@ class BoxSelect
         when  27 then codeStr = 'Escape'
         when 127 then codeStr = 'Delete'
         else 
-          if (e.metaKey or e.altKey or e.ctrlKey) and 
-             (32 <= code < 127)
-            @keyAction e, @addModifier e, String.fromCharCode code
+          if (e.metaKey or e.altKey or e.ctrlKey)
+            if (32 <= code < 127)
+              @keyAction e, String.fromCharCode code
+            else
+              e.stopPropagation()
+              e.preventDefault()
           return
-    @keyAction e, @addModifier e, codeStr
+      if codeStr then @keyAction e, codeStr
+      return
+    @keyAction e, keyId
     
   keyPress: (e) ->
-    if not @selectMode or not @editor or @editor.isDestroyed()
+    if not @selectMode or
+       not @editor or @editor.isDestroyed()
       @clear()
       return
     chr = String.fromCharCode e.charCode
-    log 'keyPress', e.keyCode, e.charCode, '"'+chr+'"', e.ctrlKey
+    # log 'keyPress', e.keyCode, e.charCode, '"'+chr+'"', (e.ctrlKey or e.altKey or e.metaKey)
     if e.ctrlKey or e.altKey or e.metaKey
-      @keyAction e, @addModifier e, chr.toUpperCase()
+      @keyAction e, chr.toUpperCase()
     else
-      @keyChar e, chr
-          
+      @unicodeChr e, chr
+      
   clear: ->
     haveEditor = (@editor and not @editor.isDestroyed() and 
                     @pane and not   @pane.isDestroyed())
