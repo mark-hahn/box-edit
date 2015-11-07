@@ -297,15 +297,19 @@ class BoxSelect
         when  13 then codeStr = 'Return'
         when  27 then codeStr = 'Escape'
         when 127 then codeStr = 'Delete'
-        else return
+        else 
+          if (e.metaKey or e.altKey or e.ctrlKey) and 
+             (32 <= code < 127)
+            @keyAction e, @addModifier e, String.fromCharCode code
+          return
     @keyAction e, @addModifier e, codeStr
     
   keyPress: (e) ->
     if not @selectMode or not @editor or @editor.isDestroyed()
       @clear()
       return
-    log 'keyPress', e.charCode, 
     chr = String.fromCharCode e.charCode
+    log 'keyPress', e.keyCode, e.charCode, '"'+chr+'"', e.ctrlKey
     if e.ctrlKey or e.altKey or e.metaKey
       @keyAction e, @addModifier e, chr.toUpperCase()
     else
