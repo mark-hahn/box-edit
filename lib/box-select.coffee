@@ -74,6 +74,14 @@ class BoxSelect
       pad = ' '; for i in [1...length-lineLen] then pad += ' '
       @editor.setTextInBufferRange [[bufRow,lineLen],[bufRow,length]], pad
   
+  selectAll: ->
+    allRange = @editor.screenRangeForBufferRange [[0,0],[9e9,9e9]]
+    row2 = allRange.end.row
+    col2 = 0
+    for row in [0...@editor.getLineCount()]
+      col2 = Math.max col2, @editor.lineTextForBufferRow(row).length
+    @setBoxByRowCol 0, 0, row2, col2
+    
   bufferOperation: (cmd, chr) ->
     # log 'bufferOperation', {cmd, chr}
     oldBufferText = @editor.getText()
@@ -265,6 +273,7 @@ class BoxSelect
     
     # log 'keyAction', codeStr
     switch codeStr
+      when 'Ctrl-A'              then @selectAll()
       when 'Ctrl-X'              then @bufferOperation 'cut'
       when 'Ctrl-C'              then @bufferOperation 'copy'
       when 'Ctrl-V'              then @bufferOperation 'paste'
