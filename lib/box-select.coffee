@@ -1,5 +1,8 @@
 ###
   lib/box-select.coffee
+  watch for scroll/resize
+  redo
+  scroll on drag
 ###
 
 SubAtom = require 'sub-atom'
@@ -20,7 +23,7 @@ class BoxSelect
          not (@editor = @wspace.getActiveTextEditor()) or @editor.isDestroyed()
       @clear()
       return 
-    @selectMode = yes
+    @selectMode = @scrollOfsDirty = yes
     @getAtomReferences()
     @getDisplayConstants()
     @createBoxWithAtomSelections()
@@ -34,19 +37,49 @@ class BoxSelect
     @pane       = @wspace.getActivePane()
     @editorView = atom.views.getView @editor
     @editorComp = @editorView.component
-    @buffer     = @editor.getBuffer()
     
+    @buffer     = @editor.getBuffer()
+  
+  getElement:  (sel) -> @editorView.shadowRoot.querySelector sel
+  getElements: (sel) -> @editorView.shadowRoot.querySelectorAll sel
+  
   getDisplayConstants: ->
     @chrWid     = @editor.getDefaultCharWidth()
     @chrHgt     = @editor.getLineHeightInPixels()
     {left: @editorPageX, top: @editorPageY, width: @editorW, height: @editorH} =
                    @editorView.getBoundingClientRect()
-    {left, top}  = @editorComp.pixelPositionForMouseEvent clientX:0, clientY:0
-    @textPageX   = -left
-    @textPageY   = -top
-    @textOfsX    = @textPageX - @editorPageX  
-    @textOfsY    = @textPageY - @editorPageY 
+    hBar = @getElement '.horizontal-scrollbar'
+    vBar = @getElement '.vertical-scrollbar'
+    if vBar.display isnt 'none' then @editorW -= vBar.offsetWidth
+    if hBar.display isnt 'none' then @editorH -= hBar.offsetHeight
+  
+  getScrollOfs: ->
+    if true  # @scrollOfsDirty
+      @scrollOfsDirty = no
+      for lineEle in @getElements '.line'
+        row = +lineEle.getAttribute 'data-screen-row'
+        {left: linePageX, top: linePageY} = lineEle.getBoundingClientRect()
+        if 0 <= (linePageY - @editorPageY) < 2 & @chrHgt then break
+      # log 'lineEle', row, linePageY
+      @scrollOfs = [@editorPageX - linePageX, @editorPageY - (linePageY - row * @chrHgt)]
+      # log ' [@editorPageX - linePageX, @editorPageY - (linePageY - row * @chrHgt)]'
+      # log 'getScrollOfs', @scrollOfs, {@editorPageX, linePageX, @editorPageY, row, @chrHgt, linePageY}
+    @scrollOfs  
     
+  edit2textXY: (x1, y1, x2, y2) ->
+    [scrollOfsX, scrollOfsY] = @getScrollOfs()
+    # log 'edit2textXY', [x1, y1, x2, y2], [x1 + scrollOfsX, y1 + scrollOfsY
+                                          # x2 + scrollOfsX, y2 + scrollOfsY]
+    [x1 + scrollOfsX, y1 + scrollOfsY
+     x2 + scrollOfsX, y2 + scrollOfsY]
+       
+  text2editXY: (x1, y1, x2, y2) ->
+    [scrollOfsX, scrollOfsY] = @getScrollOfs()
+    # log 'text2editXY', [x1, y1, x2, y2],[x1 - scrollOfsX, y1 - scrollOfsY
+                                        #  x2 - scrollOfsX, y2 - scrollOfsY]
+    [x1 - scrollOfsX, y1 - scrollOfsY
+     x2 - scrollOfsX, y2 - scrollOfsY]
+  
   createBoxWithAtomSelections: ->
     row1 = col1 = +Infinity
     row2 = col2 = -Infinity
@@ -83,7 +116,6 @@ class BoxSelect
     @setBoxByRowCol 0, 0, row2, col2
     
   openTextEditor: ->
-    if @textEditor then @closeTextEditor()
     text = @editBox 'getText'
     [row1, col1, row2, col2] = @getBoxRowCol()
     t = @textEditor = document.createElement 'textArea'
@@ -195,12 +227,12 @@ class BoxSelect
   addBoxEle: ->
     c = @cover = document.createElement 'div'
     c.id = 'boxsel-cover'
-    s = c.style
-    s.left   = @editorPageX + 'px'
-    s.top    = @editorPageY + 'px'
-    s.width  = @editorW + 'px'
-    s.height = @editorH + 'px'
-    setTimeout (-> s.cursor = 'crosshair'), 50
+    cs = c.style
+    cs.left   = @editorPageX  + 'px'
+    cs.top    = @editorPageY  + 'px'
+    cs.width  = @editorW      + 'px'
+    cs.height = @editorH      + 'px'
+    setTimeout (-> cs.cursor = 'crosshair'), 50
     b = @box = document.createElement 'div'
     b.id     = 'boxsel-box'
     document.body.appendChild c
@@ -219,43 +251,41 @@ class BoxSelect
     @box?.style.visibility = 
       (if @boxVisible then 'visible' else 'hidden')
 
-  setBoxByXY: (x1, y1, x2, y2, snap2grid = yes) ->
-    if not (s = @box?.style) then return
-    @initX1 ?= x1
-    @initY1 ?= y1
-    if (dot = (x2 is 'dot'))
-      x2 = x1
-      y2 = y1
-    if snap2grid
-      x1 = Math.round(x1/@chrWid) * @chrWid
-      y1 = Math.round(y1/@chrHgt) * @chrHgt
-      x2 = Math.round(x2/@chrWid) * @chrWid
-      y2 = Math.round(y2/@chrHgt) * @chrHgt
-    if x1 > x2 then [x1, x2] = [x2, x1]
-    if y1 > y2 then [y1, y2] = [y2, y1]
-    s.left = (x1 + @textOfsX) + 'px'
-    s.top  = (y1 + @textOfsY) + 'px'
-    if dot or (x2-x1) > 0 or (y2-y1) > 0
-      s.width  = (x2-x1) + 'px'
-      s.height = (y2-y1) + 'px'
+  setBoxByXY: (x1, y1, x2, y2) ->
+    # log 'setBoxByXY', {x1, y1, x2, y2}
+    if (dot = (x2 is 'dot')) then [x2, y2] = [x1, y1]
+    x1 = Math.round(x1/@chrWid) * @chrWid
+    y1 = Math.round(y1/@chrHgt) * @chrHgt
+    x2 = Math.round(x2/@chrWid) * @chrWid
+    y2 = Math.round(y2/@chrHgt) * @chrHgt
+    [editX1, editY1, editX2, editY2] = @text2editXY x1, y1, x2, y2
+    @initEditX1 ?= x1
+    @initEditY1 ?= y1
+    if editX1 > editX2 then [editX1, editX2] = [editX2, editX1]
+    if editY1 > editY2 then [editY1, editY2] = [editY2, editY1]
+    bs = @box.style
+    bs.left = editX1 + 'px'
+    bs.top  = editY1 + 'px'
+    if dot or (editX2-editX1) > 0 or (editY2-editY1) > 0
+      bs.width  = (editX2-editX1) + 'px'
+      bs.height = (editY2-editY1) + 'px'
     else
-      s.width  = '0'
-      s.height = @chrHgt + 'px'
+      bs.width  = '0'
+      bs.height = @chrHgt + 'px'
     @setBoxVisible yes
 
   setBoxByRowCol: (row1, col1, row2, col2) ->
     # log 'setBoxByRowCol', {row1, col1, row2, col2}
     @setBoxByXY col1 * @chrWid,  row1    * @chrHgt, 
-                col2 * @chrWid, (row2+1) * @chrHgt, no
+                col2 * @chrWid, (row2+1) * @chrHgt
 
   getBoxXY: -> 
     if not (s = @box?.style) then return [0,0,0,0]
     style2dim = (attr) -> +(s[attr].replace 'px', '')
-    x1 = style2dim('left') - @textOfsX
-    y1 = style2dim('top')  - @textOfsY
-    x2 = x1 + style2dim 'width'
-    y2 = y1 + style2dim 'height'
-    [x1, y1, x2, y2]
+    editX1 = style2dim 'left'; editY1 = style2dim 'top'
+    editX2 = editX1 + style2dim 'width'
+    editY2 = editY1 + style2dim 'height'
+    @edit2textXY editX1, editY1, editX2, editY2
     
   getBoxRowCol: -> 
     [x1, y1, x2, y2] = @getBoxXY()
@@ -279,28 +309,33 @@ class BoxSelect
     switch e.type
       when 'mousedown'
         @mouseIsDown = yes
-        if @initX1? and e.shiftKey
-          x2 = e.pageX - @textPageX
-          y2 = e.pageY - @textPageY
-          @setBoxByXY @initX1, @initY1, x2, y2
+        if @initEditX1? and e.shiftKey
+          editX2 = e.pageX - @editorPageX
+          editY2 = e.pageY - @editorPageY
+          @setBoxByXY \
+            @edit2textXY @initEditX1, @initEditY1, editX2, editY2
         else
-          @initX1 = e.pageX - @textPageX
-          @initY1 = e.pageY - @textPageY
-          @setBoxByXY @initX1, @initY1, 'dot' 
+          @initEditX1 = e.pageX - @editorPageX
+          @initEditY1 = e.pageY - @editorPageY
+          [initX1, initY1] = 
+              @edit2textXY @initEditX1, @initEditY1, 0, 0
+          @setBoxByXY initX1, initY1, 'dot', null
       
       when 'mousemove' 
         if not @mouseIsDown then return
-        x2 = e.pageX - @textPageX
-        y2 = e.pageY - @textPageY
-        @setBoxByXY @initX1, @initY1, x2, y2
+        editX2 = e.pageX - @editorPageX
+        editY2 = e.pageY - @editorPageY
+        @setBoxByXY \
+            @edit2textXY(@initEditX1, @initEditY1, editX2, editY2)...
       
       when 'mouseup'
         if not @mouseIsDown then return
         @mouseIsDown = no
-        x2 = e.pageX - @textPageX
-        y2 = e.pageY - @textPageY
-        @setBoxByXY @initX1, @initY1, x2, y2
-
+        editX2 = e.pageX - @editorPageX
+        editY2 = e.pageY - @editorPageY
+        @setBoxByXY \
+            @edit2textXY(@initEditX1, @initEditY1, editX2, editY2)...
+      
   unicodeChr: (e, chr) ->
     # log 'unicodeChr', chr.charCodeAt(0), '"'+chr+'"'
     if chr.charCodeAt(0) >= 32
