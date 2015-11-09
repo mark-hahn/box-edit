@@ -11,7 +11,7 @@ module.exports =
     cs.top    = @editorPageY  + 'px'
     cs.width  = @editorW      + 'px'
     cs.height = @editorH      + 'px'
-    setTimeout (-> cs.cursor = 'crosshair'), 50
+    setTimeout (-> cs.cursor = 'crosshair'), 100
     b = @box = document.createElement 'div'
     b.id     = 'boxsel-box'
     document.body.appendChild c
@@ -19,6 +19,7 @@ module.exports =
     c.onmousedown = (e) => @mouseEvent(e)
     c.onmousemove = (e) => @mouseEvent(e)
     c.onmouseup   = (e) => @mouseEvent(e)
+    c.onwheel     = (e) => @mouseEvent(e)
   
   refreshCoverPos: ->
     cs = @cover.style

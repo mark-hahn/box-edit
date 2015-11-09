@@ -38,3 +38,12 @@ module.exports =
           editY2 = e.pageY - @editorPageY
           @setBoxByXY \
               @edit2textXY(@initEditX1, @initEditY1, editX2, editY2)...
+
+        when 'wheel'
+          [xOfs, yOfs] = @getScrollOfs()
+          xOfs += e.deltaX
+          yOfs += e.deltaY
+          ::scrollToScreenPosition
+          
+          
+          

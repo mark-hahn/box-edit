@@ -15,7 +15,7 @@ module.exports =
     t.spellcheck = yes;   t.wrap = 'hard'
     t.value = text
     [x1, y1, x2, y2] = @getBoxXY()     
-    w = Math.max x2 - x1 + 30, 120
+    w = Math.max x2 - x1 + 30, 120     
     h = Math.max y2 - y1 + 30,  40
     ts = t.style
     bs = @box.style
@@ -31,6 +31,7 @@ module.exports =
     ts.lineHeight      = es.lineHeight
     @cover.appendChild t
     @setBoxVisible no
+    @textEditor.focus()
     
   refreshTxtEditorPos: ->
     if @textEditor

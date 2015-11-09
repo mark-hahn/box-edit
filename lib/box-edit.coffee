@@ -1,8 +1,9 @@
 ###
   lib/box-edit.coffee
-  cursor doesn't change until move
+  scrollwheel 
+  cursor jumps to top of file sometimes
   wrap problems when shrinking page
-  scrollwheel broken
+  cursor doesn't change until move
 ###
 
 SubAtom = require 'sub-atom'
@@ -31,12 +32,11 @@ class BoxSelect
     @addBoxEle()
     @createBoxWithAtomSelections()
     @checkPageDims()
+    @startUndo()
+    
     @pane.onDidChangeActiveItem    => @clear()
     document.body.onkeydown  = (e) => @keyDown  e
     document.body.onkeypress = (e) => @keyPress e
-    @undoBuffers    = []
-    @undoBoxRowCols = []
-    @undoIdx = 0
     
   getAtomReferences: ->
     @pane       = @wspace.getActivePane()
@@ -50,8 +50,7 @@ class BoxSelect
     @boxToAtomSelections() if haveEditor
     @removeBoxEle()
     @mouseIsDown = @active = no
-    @undoBuffers = @undoBoxRowCols = null
-    @undoIdx = 0
+    @endUndo()
     @pane?.activate() if haveEditor
     @pane = @editorView = @editorComp = @buffer = null
 
