@@ -1,8 +1,9 @@
 ###
   lib/box-select.coffee
-  redo
-  scroll on drag
   wrap problems when shrinking page
+  border should check against longest line contained
+  scrollwheel broken
+  box not updated on auto-scroll
 ###
 
 SubAtom = require 'sub-atom'
@@ -81,12 +82,12 @@ class BoxSelect
         @scrollRefEle.offsetTop isnt @scrollRefEleOfs
       @getPageDims editRect, chrWid, chrHgt
       @getScrollOfs yes
-      @moveCover()
-      @moveBoxEle()
-      @moveTextEditor()
-      setTimeout (=> @checkPageDims()), 50
+      @refreshCoverPos()
+      @refreshBoxPos()
+      @refreshTxtEditorPos()
+      setTimeout (=> @checkPageDims()), 200
       return
-    setTimeout (=> @checkPageDims()), 500
+    setTimeout (=> @checkPageDims()), 200
   
   edit2textXY: (x1, y1, x2, y2) ->
     [scrollOfsX, scrollOfsY] = @getScrollOfs()
@@ -226,7 +227,7 @@ class BoxSelect
     @cover.appendChild t
     @setBoxVisible no
     
-  moveTextEditor: ->
+  refreshTxtEditorPos: ->
     if @textEditor
       bs = @box.style
       ts = @textEditor.style
@@ -265,7 +266,7 @@ class BoxSelect
     c.onmousemove = (e) => @mouseEvent(e)
     c.onmouseup   = (e) => @mouseEvent(e)
   
-  moveCover: ->
+  refreshCoverPos: ->
     cs = @cover.style
     cs.left   = @editorPageX  + 'px'
     cs.top    = @editorPageY  + 'px'
@@ -314,7 +315,7 @@ class BoxSelect
     @setBoxByXY @boxCol1 * @chrWid,  @boxRow1    * @chrHgt, 
                 @boxCol2 * @chrWid, (@boxRow2+1) * @chrHgt, yes
   
-  moveBoxEle: ->
+  refreshBoxPos: ->
     @setBoxByRowCol @boxRow1, @boxCol1, @boxRow2, @boxCol2
     
   getBoxXY: -> 
@@ -348,6 +349,25 @@ class BoxSelect
       @editor.setText @undoBuffers[@undoIdx]
       @setBoxByRowCol @undoBoxRowCols[@undoIdx]...
   
+  chkScrollBorders: (editX, editY) ->
+    now = Date.now()
+    if @chkScrlBrdrTimeout 
+      clearTimeout @chkScrlBrdrTimeout
+      @chkScrlBrdrTimeout = null
+    else
+      @chkScrollBordersStart = now
+    if (not (6 * @chrWid < editX < @editorPageW - 2 * @chrWid) or
+        not (2 * @chrHgt < editY < @editorPageH - 2 * @chrHgt)) and @mouseIsDown
+      [ofsX, ofsY] = @getScrollOfs()
+      row = (Math.round (editY + ofsY) / @chrHgt) - 1
+      col =  Math.round (editX + ofsX) / @chrWid
+      @editor.scrollToScreenPosition [row, col]
+      @getPageDims()
+      @refreshBoxPos()
+      if now < @chkScrollBordersStart + 2e3
+        @chkScrlBrdrTimeout = 
+          setTimeout (=> @chkScrollBorders editX, editY), 100
+    
   mouseEvent: (e) ->
     if e.target is @textEditor then return
     if not @selectMode or not @editor or @editor.isDestroyed()
@@ -372,9 +392,10 @@ class BoxSelect
         if not @mouseIsDown then return
         editX2 = e.pageX - @editorPageX
         editY2 = e.pageY - @editorPageY
-        @setBoxByXY \
-            @edit2textXY(@initEditX1, @initEditY1, editX2, editY2)...
-      
+        [x1, y1, x2, y2] = @edit2textXY @initEditX1, @initEditY1, editX2, editY2
+        @setBoxByXY x1, y1, x2, y2
+        @chkScrollBorders editX2, editY2
+        
       when 'mouseup'
         if not @mouseIsDown then return
         @mouseIsDown = no
