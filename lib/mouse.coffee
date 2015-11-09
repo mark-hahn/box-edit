@@ -1,6 +1,6 @@
 
 log = (args...) -> 
-  console.log.apply console, ['box-select, mous:'].concat args
+  console.log.apply console, ['box-edit, mous:'].concat args
 
 
 module.exports =

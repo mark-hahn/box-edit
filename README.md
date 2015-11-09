@@ -1,5 +1,5 @@
 
-## box-select
+## box-edit
 
 An Atom package for rectangular cut/paste; supports short lines.
 

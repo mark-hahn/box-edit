@@ -1,6 +1,6 @@
 
 log = (args...) -> 
-  console.log.apply console, ['box-select, undo:'].concat args
+  console.log.apply console, ['box-edit, undo:'].concat args
 
 module.exports =
   addToUndo: (txt, rowcol) ->

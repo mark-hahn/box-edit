@@ -1,5 +1,6 @@
 ###
-  lib/box-select.coffee
+  lib/box-edit.coffee
+  cursor doesn't change until move
   wrap problems when shrinking page
   border should check against longest line contained
   scrollwheel broken
@@ -9,7 +10,7 @@
 SubAtom = require 'sub-atom'
 
 log = (args...) -> 
-  console.log.apply console, ['box-select, bsel:'].concat args
+  console.log.apply console, ['box-edit, bsel:'].concat args
 
 class BoxSelect
   
@@ -17,7 +18,7 @@ class BoxSelect
     @wspace = atom.workspace
     @subs = new SubAtom
     @subs.add atom.commands.add 'atom-text-editor', 
-                                'box-select:toggle': => @toggle()
+                                'box-edit:toggle': => @toggle()
   
   toggle: ->
     if @active or
