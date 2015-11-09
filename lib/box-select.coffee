@@ -1,8 +1,8 @@
 ###
   lib/box-select.coffee
-  watch for scroll/resize
   redo
   scroll on drag
+  wrap problems when shrinking page
 ###
 
 SubAtom = require 'sub-atom'
@@ -34,6 +34,7 @@ class BoxSelect
     document.body.onkeypress = (e) => @keyPress e
     @undoBuffers    = []
     @undoBoxRowCols = []
+    @undoIdx = 0
     
   getAtomReferences: ->
     @pane       = @wspace.getActivePane()
@@ -123,10 +124,11 @@ class BoxSelect
       pad = ' '; for i in [1...length-lineLen] then pad += ' '
       @editor.setTextInBufferRange [[bufRow,lineLen],[bufRow,length]], pad
   
-  editBox: (cmd, text) ->
+  editBox: (cmd, text, addToUndo = yes) ->
     # log '@editBox', {cmd, text}
-    oldBufferText = @editor.getText()
-    oldRowCol = [row1, col1, row2, col2] = @getBoxRowCol()
+    if addToUndo
+      oldBufferText = @editor.getText()
+      oldRowCol = [row1, col1, row2, col2] = @getBoxRowCol()
     
     clipHgt = 0
     if cmd in ['paste', 'setText']  
@@ -184,9 +186,7 @@ class BoxSelect
       else col1
     @setBoxByRowCol row1, col1, screenRow-1, newCol2
     
-    if @editor.getText() isnt oldBufferText
-      @undoBuffers.push oldBufferText
-      @undoBoxRowCols.push oldRowCol
+    if addToUndo then @addToUndo oldBufferText, oldRowCol
       
     copyText
     
@@ -236,6 +236,7 @@ class BoxSelect
   closeTextEditor: ->
     @setBoxVisible yes
     if @textEditor 
+      @addToUndo @editBox('getText'), @getBoxRowCol()
       @editBox 'setText', @textEditor.value
       @cover.removeChild @textEditor
       @textEditor = null
@@ -325,20 +326,27 @@ class BoxSelect
     @edit2textXY editX1, editY1, editX2, editY2
     
   getBoxRowCol: -> [@boxRow1, @boxCol1, @boxRow2, @boxCol2]
-    # if @boxRow1
-    #   return [@boxRow1, @boxCol1, @boxRow2, @boxCol2]
-    # [x1, y1, x2, y2] = @getBoxXY()
-    # botRow = @buffer.getLastRow()
-    # @boxRow1 = Math.max      0,  Math.round y1 / @chrHgt
-    # @boxCol1 = Math.max      0,  Math.round x1 / @chrWid
-    # @boxRow2 = Math.min botRow, (Math.round y2 / @chrHgt) - 1
-    # @boxCol2 =                   Math.round x2 / @chrWid
-    # [@boxRow1, @boxCol1, @boxRow2, @boxCol2]
 
+  addToUndo: (txt, rowcol) ->
+    if @undoIdx is 0 or txt isnt @undoBuffers[@undoIdx-1]
+      @undoBuffers[@undoIdx]    = txt
+      @undoBoxRowCols[@undoIdx] = rowcol
+      @undoIdx++
+      @undoBuffers = @undoBuffers[0...@undoIdx]
+      
   undo: ->
-    if (oldBuf = @undoBuffers.pop())
-      @editor.setText oldBuf
-      @setBoxByRowCol @undoBoxRowCols.pop()...
+    if @undoIdx > 0
+      @undoBuffers[@undoIdx]    = @editor.getText()
+      @undoBoxRowCols[@undoIdx] = @getBoxRowCol()
+      --@undoIdx
+      @editor.setText @undoBuffers[@undoIdx]
+      @setBoxByRowCol @undoBoxRowCols[@undoIdx]...
+
+  redo: ->
+    if @undoIdx < @undoBuffers.length-1 
+      @undoIdx++
+      @editor.setText @undoBuffers[@undoIdx]
+      @setBoxByRowCol @undoBoxRowCols[@undoIdx]...
   
   mouseEvent: (e) ->
     if e.target is @textEditor then return
@@ -390,12 +398,13 @@ class BoxSelect
     
     log 'keyAction', codeStr
     switch codeStr
-      when 'Ctrl-A'              then @selectAll()
       when 'Ctrl-X'              then @editBox 'cut'
       when 'Ctrl-C'              then @editBox 'copy'
       when 'Ctrl-V'              then @editBox 'paste'
-      when 'Ctrl-Z'              then @undo()
       when 'Backspace', 'Delete' then @editBox 'del'
+      when 'Ctrl-A'              then @selectAll()
+      when 'Ctrl-Z'              then @undo()
+      when 'Ctrl-Y'              then @redo()
       when 'Enter'                
         if @textEditor then return
         else @openTextEditor()
@@ -455,6 +464,7 @@ class BoxSelect
     @removeBoxEle()
     @mouseIsDown = @selectMode = no
     @undoBuffers = @undoBoxRowCols = null
+    @undoIdx = 0
     @pane?.activate() if haveEditor
     @pane = @editorView = @editorComp = @buffer = null
 
