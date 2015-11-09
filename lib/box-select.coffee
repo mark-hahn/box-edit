@@ -23,10 +23,12 @@ class BoxSelect
          not (@editor = @wspace.getActiveTextEditor()) or @editor.isDestroyed()
       @clear()
       return 
-    @selectMode = @scrollOfsDirty = yes
+    @selectMode = yes
     @getAtomReferences()
-    @getDisplayConstants()
+    @getPageDims()
+    @addBoxEle()
     @createBoxWithAtomSelections()
+    @checkPageDims()
     @pane.onDidChangeActiveItem    => @clear()
     document.body.onkeydown  = (e) => @keyDown  e
     document.body.onkeypress = (e) => @keyPress e
@@ -37,46 +39,61 @@ class BoxSelect
     @pane       = @wspace.getActivePane()
     @editorView = atom.views.getView @editor
     @editorComp = @editorView.component
-    
     @buffer     = @editor.getBuffer()
   
   getElement:  (sel) -> @editorView.shadowRoot.querySelector sel
   getElements: (sel) -> @editorView.shadowRoot.querySelectorAll sel
   
-  getDisplayConstants: ->
-    @chrWid     = @editor.getDefaultCharWidth()
-    @chrHgt     = @editor.getLineHeightInPixels()
-    {left: @editorPageX, top: @editorPageY, width: @editorW, height: @editorH} =
-                   @editorView.getBoundingClientRect()
-    hBar = @getElement '.horizontal-scrollbar'
-    vBar = @getElement '.vertical-scrollbar'
-    if vBar.display isnt 'none' then @editorW -= vBar.offsetWidth
-    if hBar.display isnt 'none' then @editorH -= hBar.offsetHeight
-  
-  getScrollOfs: ->
-    if true  # @scrollOfsDirty
-      @scrollOfsDirty = no
-      for lineEle in @getElements '.line'
-        row = +lineEle.getAttribute 'data-screen-row'
-        {left: linePageX, top: linePageY} = lineEle.getBoundingClientRect()
-        if 0 <= (linePageY - @editorPageY) < 2 & @chrHgt then break
-      # log 'lineEle', row, linePageY
+  getPageDims: (editRect, chrWid, chrHgt) ->
+    @chrWid = (chrWid ? @editor.getDefaultCharWidth()  )
+    @chrHgt = (chrHgt ? @editor.getLineHeightInPixels())
+    {left: @editorPageX, top: @editorPageY, width: @editorWtotal, height: @editorHtotal} =
+                   (editRect ? @editorView.getBoundingClientRect())
+    @hBar = @getElement '.horizontal-scrollbar'
+    @vBar = @getElement '.vertical-scrollbar'
+    @editorW = @editorWtotal - 
+      (if (@vBarVis = (@vBar.display isnt 'none')) then @vBar.offsetWidth  else 0)
+    @editorH = @editorHtotal - 
+      (if (@hBarVis = (@hBar.display isnt 'none')) then @hBar.offsetHeight else 0)
+
+  getScrollOfs: (update) ->
+    if update or not @scrollOfs
+      for @scrollRefEle in @getElements '.line'
+        row = +@scrollRefEle.getAttribute 'data-screen-row'
+        {left: linePageX, top: linePageY} = @scrollRefEle.getBoundingClientRect()
+        if 0 <= (linePageY - @editorPageY) < 2 * @chrHgt then break
+      @scrollRefEleOfs = @scrollRefEle.offsetTop
       @scrollOfs = [@editorPageX - linePageX, @editorPageY - (linePageY - row * @chrHgt)]
-      # log ' [@editorPageX - linePageX, @editorPageY - (linePageY - row * @chrHgt)]'
-      # log 'getScrollOfs', @scrollOfs, {@editorPageX, linePageX, @editorPageY, row, @chrHgt, linePageY}
     @scrollOfs  
     
+  checkPageDims: ->
+    if not @editorView then return
+    {left, top, width, height} = (editRect = @editorView.getBoundingClientRect())
+    if  @editorPageX  isnt left   or
+        @editorPageY  isnt top    or
+        @editorWtotal isnt width  or
+        @editorHtotal isnt height or
+        @chrWid       isnt (chrWid = @editor.getDefaultCharWidth()  ) or
+        @chrHgt       isnt (chrHgt = @editor.getLineHeightInPixels()) or
+        @vBarVis      isnt (@vBar.display isnt 'none') or
+        @hbarVis      isnt (@hBar.display isnt 'none') or
+        @scrollRefEle.offsetTop isnt @scrollRefEleOfs
+      @getPageDims editRect, chrWid, chrHgt
+      @getScrollOfs yes
+      @moveCover()
+      @moveBoxEle()
+      @moveTextEditor()
+      setTimeout (=> @checkPageDims()), 50
+      return
+    setTimeout (=> @checkPageDims()), 500
+  
   edit2textXY: (x1, y1, x2, y2) ->
     [scrollOfsX, scrollOfsY] = @getScrollOfs()
-    # log 'edit2textXY', [x1, y1, x2, y2], [x1 + scrollOfsX, y1 + scrollOfsY
-                                          # x2 + scrollOfsX, y2 + scrollOfsY]
     [x1 + scrollOfsX, y1 + scrollOfsY
      x2 + scrollOfsX, y2 + scrollOfsY]
        
   text2editXY: (x1, y1, x2, y2) ->
     [scrollOfsX, scrollOfsY] = @getScrollOfs()
-    # log 'text2editXY', [x1, y1, x2, y2],[x1 - scrollOfsX, y1 - scrollOfsY
-                                        #  x2 - scrollOfsX, y2 - scrollOfsY]
     [x1 - scrollOfsX, y1 - scrollOfsY
      x2 - scrollOfsX, y2 - scrollOfsY]
   
@@ -89,7 +106,6 @@ class BoxSelect
       col1 = Math.min col1, range.start.column, range.end.column
       row2 = Math.max row2, range.start.row,    range.end.row
       col2 = Math.max col2, range.start.column, range.end.column
-    @addBoxEle()
     @setBoxByRowCol row1, col1, row2, col2
     for selection in @editor.getSelections()
       selection.destroy()
@@ -107,49 +123,6 @@ class BoxSelect
       pad = ' '; for i in [1...length-lineLen] then pad += ' '
       @editor.setTextInBufferRange [[bufRow,lineLen],[bufRow,length]], pad
   
-  selectAll: ->
-    allRange = @editor.screenRangeForBufferRange [[0,0],[9e9,9e9]]
-    row2 = allRange.end.row
-    col2 = 0
-    for row in [0...@editor.getLineCount()]
-      col2 = Math.max col2, @editor.lineTextForBufferRow(row).length
-    @setBoxByRowCol 0, 0, row2, col2
-    
-  openTextEditor: ->
-    text = @editBox 'getText'
-    [row1, col1, row2, col2] = @getBoxRowCol()
-    t = @textEditor = document.createElement 'textArea'
-    t.id = 'boxsel-txtarea'
-    t   .classList.add 'native-key-bindings'
-    @box.classList.add 'native-key-bindings'
-    t.rows = row2-row1+1; t.cols = col2-col1-1
-    t.spellcheck = yes;   t.wrap = 'hard'
-    t.value = text
-    [x1, y1, x2, y2] = @getBoxXY()     
-    w = Math.max x2 - x1 + 30, 120
-    h = Math.max y2 - y1 + 30,  40
-    ts = t.style
-    bs = @box.style
-    es = window.getComputedStyle @editorView
-    ts.left            = bs.left
-    ts.top             = bs.top
-    ts.width           = w + 'px'
-    ts.height          = h + 'px'
-    ts.fontFamily      = es.fontFamily
-    ts.backgroundColor = es.backgroundColor
-    ts.color           = es.color
-    ts.fontSize        = es.fontSize
-    ts.lineHeight      = es.lineHeight
-    @cover.appendChild t
-    @setBoxVisible no
-  
-  closeTextEditor: ->
-    @setBoxVisible yes
-    if @textEditor 
-      @editBox 'setText', @textEditor.value
-      @cover.removeChild @textEditor
-      @textEditor = null
-
   editBox: (cmd, text) ->
     # log '@editBox', {cmd, text}
     oldBufferText = @editor.getText()
@@ -217,6 +190,56 @@ class BoxSelect
       
     copyText
     
+  selectAll: ->
+    allRange = @editor.screenRangeForBufferRange [[0,0],[9e9,9e9]]
+    row2 = allRange.end.row
+    col2 = 0
+    for row in [0...@editor.getLineCount()]
+      col2 = Math.max col2, @editor.lineTextForBufferRow(row).length
+    @setBoxByRowCol 0, 0, row2, col2
+    
+  openTextEditor: ->
+    text = @editBox 'getText'
+    [row1, col1, row2, col2] = @getBoxRowCol()
+    t = @textEditor = document.createElement 'textArea'
+    t.id = 'boxsel-txtarea'
+    t   .classList.add 'native-key-bindings'
+    @box.classList.add 'native-key-bindings'
+    t.rows = row2-row1+1; t.cols = col2-col1-1
+    t.spellcheck = yes;   t.wrap = 'hard'
+    t.value = text
+    [x1, y1, x2, y2] = @getBoxXY()     
+    w = Math.max x2 - x1 + 30, 120
+    h = Math.max y2 - y1 + 30,  40
+    ts = t.style
+    bs = @box.style
+    es = window.getComputedStyle @editorView
+    ts.left            = bs.left
+    ts.top             = bs.top
+    ts.width           = w + 'px'
+    ts.height          = h + 'px'
+    ts.fontFamily      = es.fontFamily
+    ts.backgroundColor = es.backgroundColor
+    ts.color           = es.color
+    ts.fontSize        = es.fontSize
+    ts.lineHeight      = es.lineHeight
+    @cover.appendChild t
+    @setBoxVisible no
+    
+  moveTextEditor: ->
+    if @textEditor
+      bs = @box.style
+      ts = @textEditor.style
+      ts.left = bs.left
+      ts.top  = bs.top
+  
+  closeTextEditor: ->
+    @setBoxVisible yes
+    if @textEditor 
+      @editBox 'setText', @textEditor.value
+      @cover.removeChild @textEditor
+      @textEditor = null
+
   boxToAtomSelections: ->
     oldSelection = @editor.getLastSelection()
     [row1, col1, row2, col2] = @getBoxRowCol()
@@ -241,6 +264,13 @@ class BoxSelect
     c.onmousemove = (e) => @mouseEvent(e)
     c.onmouseup   = (e) => @mouseEvent(e)
   
+  moveCover: ->
+    cs = @cover.style
+    cs.left   = @editorPageX  + 'px'
+    cs.top    = @editorPageY  + 'px'
+    cs.width  = @editorW      + 'px'
+    cs.height = @editorH      + 'px'
+    
   removeBoxEle: ->
     if @cover 
       document.body.removeChild @cover
@@ -251,8 +281,7 @@ class BoxSelect
     @box?.style.visibility = 
       (if @boxVisible then 'visible' else 'hidden')
 
-  setBoxByXY: (x1, y1, x2, y2) ->
-    # log 'setBoxByXY', {x1, y1, x2, y2}
+  setBoxByXY: (x1, y1, x2, y2, haveRowCol) ->
     if (dot = (x2 is 'dot')) then [x2, y2] = [x1, y1]
     x1 = Math.round(x1/@chrWid) * @chrWid
     y1 = Math.round(y1/@chrHgt) * @chrHgt
@@ -272,13 +301,21 @@ class BoxSelect
     else
       bs.width  = '0'
       bs.height = @chrHgt + 'px'
+    if not haveRowCol
+      botRow = @buffer.getLastRow()
+      @boxRow1 = Math.max      0,  Math.round y1 / @chrHgt
+      @boxCol1 = Math.max      0,  Math.round x1 / @chrWid
+      @boxRow2 = Math.min botRow, (Math.round y2 / @chrHgt) - 1
+      @boxCol2 =                   Math.round x2 / @chrWid
     @setBoxVisible yes
 
-  setBoxByRowCol: (row1, col1, row2, col2) ->
-    # log 'setBoxByRowCol', {row1, col1, row2, col2}
-    @setBoxByXY col1 * @chrWid,  row1    * @chrHgt, 
-                col2 * @chrWid, (row2+1) * @chrHgt
-
+  setBoxByRowCol: (@boxRow1, @boxCol1, @boxRow2, @boxCol2) ->
+    @setBoxByXY @boxCol1 * @chrWid,  @boxRow1    * @chrHgt, 
+                @boxCol2 * @chrWid, (@boxRow2+1) * @chrHgt, yes
+  
+  moveBoxEle: ->
+    @setBoxByRowCol @boxRow1, @boxCol1, @boxRow2, @boxCol2
+    
   getBoxXY: -> 
     if not (s = @box?.style) then return [0,0,0,0]
     style2dim = (attr) -> +(s[attr].replace 'px', '')
@@ -287,14 +324,16 @@ class BoxSelect
     editY2 = editY1 + style2dim 'height'
     @edit2textXY editX1, editY1, editX2, editY2
     
-  getBoxRowCol: -> 
-    [x1, y1, x2, y2] = @getBoxXY()
-    botRow = @buffer.getLastRow()
-    row1 = Math.max      0,  Math.round y1 / @chrHgt
-    col1 = Math.max      0,  Math.round x1 / @chrWid
-    row2 = Math.min botRow, (Math.round y2 / @chrHgt) - 1
-    col2 =                   Math.round x2 / @chrWid
-    [row1, col1, row2, col2]
+  getBoxRowCol: -> [@boxRow1, @boxCol1, @boxRow2, @boxCol2]
+    # if @boxRow1
+    #   return [@boxRow1, @boxCol1, @boxRow2, @boxCol2]
+    # [x1, y1, x2, y2] = @getBoxXY()
+    # botRow = @buffer.getLastRow()
+    # @boxRow1 = Math.max      0,  Math.round y1 / @chrHgt
+    # @boxCol1 = Math.max      0,  Math.round x1 / @chrWid
+    # @boxRow2 = Math.min botRow, (Math.round y2 / @chrHgt) - 1
+    # @boxCol2 =                   Math.round x2 / @chrWid
+    # [@boxRow1, @boxCol1, @boxRow2, @boxCol2]
 
   undo: ->
     if (oldBuf = @undoBuffers.pop())
