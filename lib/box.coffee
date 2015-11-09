@@ -34,16 +34,6 @@ module.exports =
       @cover.removeChild @box
       @cover = @box = null
       
-  getBoxXY: -> 
-    if not (s = @box?.style) then return [0,0,0,0]
-    style2dim = (attr) -> +(s[attr].replace 'px', '')
-    editX1 = style2dim 'left'; editY1 = style2dim 'top'
-    editX2 = editX1 + style2dim 'width'
-    editY2 = editY1 + style2dim 'height'
-    @edit2textXY editX1, editY1, editX2, editY2
-    
-  getBoxRowCol: -> [@boxRow1, @boxCol1, @boxRow2, @boxCol2]
-
   setBoxVisible: (@boxVisible) ->
     @box?.style.visibility = 
       (if @boxVisible then 'visible' else 'hidden')
@@ -59,10 +49,11 @@ module.exports =
     @initEditY1 ?= y1
     if editX1 > editX2 then [editX1, editX2] = [editX2, editX1]
     if editY1 > editY2 then [editY1, editY2] = [editY2, editY1]
-    bs = @box.style
+    # log 'setBoxByXY', {x1, y1, x2, y2, editX1, editY1, editX2, editY2, @initEditX1, @initEditY1, haveRowCol}
+    bs = @box.style 
     bs.left = editX1 + 'px'
     bs.top  = editY1 + 'px'
-    if dot or (editX2-editX1) > 0 or (editY2-editY1) > 0
+    if editX2-editX1 > 0 or editY2-editY1 > 0
       bs.width  = (editX2-editX1) + 'px'
       bs.height = (editY2-editY1) + 'px'
     else
@@ -72,30 +63,30 @@ module.exports =
       botRow = @buffer.getLastRow()
       @boxRow1 = Math.max      0,  Math.round y1 / @chrHgt
       @boxCol1 = Math.max      0,  Math.round x1 / @chrWid
-      @boxRow2 = Math.min botRow, (Math.round y2 / @chrHgt) - 1
+      @boxRow2 = Math.min botRow, (Math.round y2 / @chrHgt) - (if dot then 0 else 1)
       @boxCol2 =                   Math.round x2 / @chrWid
     @setBoxVisible yes
+    # log 'setBoxByXY', {@boxRow1, @boxCol1, @boxRow2, @boxCol2, haveRowCol}
 
   setBoxByRowCol: (@boxRow1, @boxCol1, @boxRow2, @boxCol2) ->
+    # log 'setBoxByRowCol', {@boxRow1, @boxCol1, @boxRow2, @boxCol2}
     @setBoxByXY @boxCol1 * @chrWid,  @boxRow1    * @chrHgt, 
                 @boxCol2 * @chrWid, (@boxRow2+1) * @chrHgt, yes
   
+  getBoxXY: -> 
+    if not (s = @box?.style) then return [0,0,0,0]
+    style2dim = (attr) -> +(s[attr].replace 'px', '')
+    editX1 = style2dim 'left'; editY1 = style2dim 'top'
+    editX2 = editX1 + style2dim 'width'
+    editY2 = editY1 + style2dim 'height'
+    @edit2textXY editX1, editY1, editX2, editY2
+    
+  getBoxRowCol: -> 
+    # log 'getBoxRowCol', {@boxRow1, @boxCol1, @boxRow2, @boxCol2}
+    [@boxRow1, @boxCol1, @boxRow2, @boxCol2]
+
   refreshBoxPos: ->
     @setBoxByRowCol @boxRow1, @boxCol1, @boxRow2, @boxCol2
-    
-  createBoxWithAtomSelections: ->
-    row1 = col1 = +Infinity
-    row2 = col2 = -Infinity
-    for sel in @editor.getSelections()
-      range = sel.getBufferRange()
-      row1 = Math.min row1, range.start.row,    range.end.row
-      col1 = Math.min col1, range.start.column, range.end.column
-      row2 = Math.max row2, range.start.row,    range.end.row
-      col2 = Math.max col2, range.start.column, range.end.column
-    @setBoxByRowCol row1, col1, row2, col2
-    for selection in @editor.getSelections()
-      selection.destroy()
-    @editor.getLastCursor().setVisible no
     
   editBox: (cmd, text, addToUndo = yes) ->
     # log '@editBox', {cmd, text}
@@ -123,7 +114,7 @@ module.exports =
     if cmd not in ['copy', 'getText']
       @ensureScreenHgt Math.max row2, row1 + clipHgt
     
-    dbg = 0
+    # dbg = 0
     screenRow = row1
     boxRow = 0; boxLine = ''
     if cmd is 'fill' then for i in [col1...col2] then boxLine += text
@@ -139,7 +130,7 @@ module.exports =
       bufRange = 
         @editor.bufferRangeForScreenRange [[screenRow,col1],[screenRow,col2]]
       screenRow++
-      if ++dbg > 30 then log 'oops'; return
+      # if ++dbg > 100000 then log 'edit box infinite loop'; return
       if bufRow is lastBufRow then continue
       lastBufRow = bufRow
       
@@ -171,10 +162,24 @@ module.exports =
       col2 = Math.max col2, @editor.lineTextForBufferRow(row).length
     @setBoxByRowCol 0, 0, row2, col2
     
+  atomSelectionsToBox: ->
+    row1 = col1 = +Infinity
+    row2 = col2 = -Infinity
+    for sel in @editor.getSelections()
+      range = sel.getBufferRange()
+      row1 = Math.min row1, range.start.row,    range.end.row
+      col1 = Math.min col1, range.start.column, range.end.column
+      row2 = Math.max row2, range.start.row,    range.end.row
+      col2 = Math.max col2, range.start.column, range.end.column
+    @setBoxByRowCol row1, col1, row2, col2
+    for selection in @editor.getSelections()
+      selection.destroy()
+    @editor.getLastCursor().setVisible no
+    
   boxToAtomSelections: ->
-    oldSelection = @editor.getLastSelection()
+    oldSelections = @editor.getSelections()
     [row1, col1, row2, col2] = @getBoxRowCol()
     for row in [row1..row2]
       @editor.addSelectionForBufferRange [[row, col1], [row, col2]]
-    oldSelection.destroy()
-          
+    for sel in oldSelections then sel.destroy()
+

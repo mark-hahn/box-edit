@@ -12,11 +12,10 @@ module.exports =
       switch e.type
         when 'mousedown'
           @mouseIsDown = yes
-          if @initEditX1? and e.shiftKey
+          if e.shiftKey
             editX2 = e.pageX - @editorPageX
             editY2 = e.pageY - @editorPageY
-            @setBoxByXY \
-              @edit2textXY @initEditX1, @initEditY1, editX2, editY2
+            @setBoxByXY @edit2textXY(@initEditX1, @initEditY1, editX2, editY2)...
           else
             @initEditX1 = e.pageX - @editorPageX
             @initEditY1 = e.pageY - @editorPageY
@@ -36,14 +35,12 @@ module.exports =
           @mouseIsDown = no
           editX2 = e.pageX - @editorPageX
           editY2 = e.pageY - @editorPageY
-          @setBoxByXY \
-              @edit2textXY(@initEditX1, @initEditY1, editX2, editY2)...
+          @setBoxByXY @edit2textXY(@initEditX1, @initEditY1, editX2, editY2)...
 
         when 'wheel'
           [xOfs, yOfs] = @getScrollOfs()
-          xOfs += e.deltaX
-          yOfs += e.deltaY
-          ::scrollToScreenPosition
+          @editorView.setScrollTop  @editorView.getScrollTop()  + e.deltaY
+          @editorView.setScrollLeft @editorView.getScrollLeft() + e.deltaX
           
           
           

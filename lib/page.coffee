@@ -12,12 +12,12 @@ module.exports =
     @chrHgt = (chrHgt ? @editor.getLineHeightInPixels())
     {left: @editorPageX, top: @editorPageY, width: @editorWtotal, height: @editorHtotal} =
                    (editRect ? @editorView.getBoundingClientRect())
-    @hBar = @getElement '.horizontal-scrollbar'
-    @vBar = @getElement '.vertical-scrollbar'
-    @editorW = @editorWtotal - 
-      (if (@vBarVis = (@vBar.display isnt 'none')) then @vBar.offsetWidth  else 0)
-    @editorH = @editorHtotal - 
-      (if (@hBarVis = (@hBar.display isnt 'none')) then @hBar.offsetHeight else 0)
+    @editorW    = @editorWtotal - (@scrollBarW = @editorView.getVerticalScrollbarWidth())
+    @editorH    = @editorHtotal - (@scrollBarH = @editorView.getHorizontalScrollbarHeight())
+    @textOfsX   = @editorW - @editorView.getWidth()
+    @textOfsY   = @editorH - @editorView.getHeight()
+    @scrollTop  = @editorView.getScrollTop()
+    @scrollLeft = @editorView.getScrollLeft()
 
   checkPageDims: ->
     if not @editorView then return
@@ -28,9 +28,10 @@ module.exports =
         @editorHtotal isnt height                                     or
         @chrWid       isnt (chrWid = @editor.getDefaultCharWidth()  ) or
         @chrHgt       isnt (chrHgt = @editor.getLineHeightInPixels()) or
-        @vBarVis      isnt (@vBar.display isnt 'none')                or
-        @hbarVis      isnt (@hBar.display isnt 'none')                or
-        @scrollRefEle.offsetTop isnt @scrollRefEleOfs 
+        @scrollBarW   isnt @editorView.getVerticalScrollbarWidth()    or
+        @scrollBarH   isnt @editorView.getHorizontalScrollbarHeight() or
+        @scrollTop    isnt @editorView.getScrollTop()                 or
+        @scrollLeft   isnt @editorView.getScrollLeft()
       @getPageDims editRect, chrWid, chrHgt
       @getScrollOfs yes
       @refreshCoverPos()

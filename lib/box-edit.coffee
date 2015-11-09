@@ -1,9 +1,5 @@
 ###
   lib/box-edit.coffee
-  scrollwheel 
-  cursor jumps to top of file sometimes
-  wrap problems when shrinking page
-  cursor doesn't change until move
 ###
 
 SubAtom = require 'sub-atom'
@@ -30,7 +26,7 @@ class BoxSelect
     @getAtomReferences()
     @getPageDims()
     @addBoxEle()
-    @createBoxWithAtomSelections()
+    @atomSelectionsToBox()
     @checkPageDims()
     @startUndo()
     

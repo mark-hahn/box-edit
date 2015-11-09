@@ -15,9 +15,17 @@ module.exports =
     if e.shiftKey then codeStr = 'Shift-' + codeStr
     if e.altKey   then codeStr = 'Alt-'   + codeStr
     if e.ctrlKey  then codeStr = 'Ctrl-'  + codeStr
+    # log 'keyAction', codeStr
     
-    log 'keyAction', codeStr
+    # @boxEditToggleBinding ?= 
+    #   atom.keymaps.findKeyBindings(command: 'box-edit:toggle')[0]
+    #       .keystrokes.toLowerCase()
+    # log '@boxEditToggleBinding', @boxEditToggleBinding
+    # if @boxEditToggleBinding is codeStr.toLowerCase() 
+    #   codeStr = 'Alt-S'
+    # 
     switch codeStr
+      when 'Alt-S'               then @toggle()
       when 'Ctrl-X'              then @editBox 'cut'
       when 'Ctrl-C'              then @editBox 'copy'
       when 'Ctrl-V'              then @editBox 'paste'
@@ -25,7 +33,7 @@ module.exports =
       when 'Ctrl-A'              then @selectAll()
       when 'Ctrl-Z'              then @undo()
       when 'Ctrl-Y'              then @redo()
-      when 'Enter'                
+      when 'Enter'
         if @textEditor then return
         else @openTextEditor()
       when 'Escape', 'Tab' 
