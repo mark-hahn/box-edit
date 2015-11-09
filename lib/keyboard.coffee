@@ -2,7 +2,6 @@
 log = (args...) -> 
   console.log.apply console, ['box-edit, keyb:'].concat args
 
-
 module.exports =
   unicodeChr: (e, chr) ->
     # log 'unicodeChr', chr.charCodeAt(0), '"'+chr+'"'

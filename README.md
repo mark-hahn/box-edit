@@ -1,7 +1,7 @@
 
 ## box-edit
 
-An Atom package for rectangular cut/paste; supports short lines.
+An Atom package to edit rectangular areas; supports short lines..
 
 ### License
 

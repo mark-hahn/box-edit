@@ -1,2 +1,2 @@
 'atom-workspace atom-text-editor:not(.mini)':
-  'ctrl-b':       'box-edit:toggle'
+  'alt-s':       'box-edit:toggle'

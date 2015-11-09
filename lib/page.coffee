@@ -22,15 +22,15 @@ module.exports =
   checkPageDims: ->
     if not @editorView then return
     {left, top, width, height} = (editRect = @editorView.getBoundingClientRect())
-    if  @editorPageX  isnt left   or
-        @editorPageY  isnt top    or
-        @editorWtotal isnt width  or
-        @editorHtotal isnt height or
+    if  @editorPageX  isnt left                                       or
+        @editorPageY  isnt top                                        or
+        @editorWtotal isnt width                                      or
+        @editorHtotal isnt height                                     or
         @chrWid       isnt (chrWid = @editor.getDefaultCharWidth()  ) or
         @chrHgt       isnt (chrHgt = @editor.getLineHeightInPixels()) or
-        @vBarVis      isnt (@vBar.display isnt 'none') or
-        @hbarVis      isnt (@hBar.display isnt 'none') or
-        @scrollRefEle.offsetTop isnt @scrollRefEleOfs
+        @vBarVis      isnt (@vBar.display isnt 'none')                or
+        @hbarVis      isnt (@hBar.display isnt 'none')                or
+        @scrollRefEle.offsetTop isnt @scrollRefEleOfs 
       @getPageDims editRect, chrWid, chrHgt
       @getScrollOfs yes
       @refreshCoverPos()
@@ -72,22 +72,3 @@ module.exports =
       pad = ' '; for i in [1...length-lineLen] then pad += ' '
       @editor.setTextInBufferRange [[bufRow,lineLen],[bufRow,length]], pad
   
-  chkScrollBorders: (editX, editY) ->
-    now = Date.now()
-    if @chkScrlBrdrTimeout 
-      clearTimeout @chkScrlBrdrTimeout
-      @chkScrlBrdrTimeout = null
-    else
-      @chkScrollBordersStart = now
-    if (not (6 * @chrWid < editX < @editorPageW - 2 * @chrWid) or
-        not (2 * @chrHgt < editY < @editorPageH - 2 * @chrHgt)) and @mouseIsDown
-      [ofsX, ofsY] = @getScrollOfs()
-      row = (Math.round (editY + ofsY) / @chrHgt) - 1
-      col =  Math.round (editX + ofsX) / @chrWid
-      @editor.scrollToScreenPosition [row, col]
-      @getPageDims()
-      @refreshBoxPos()
-      if now < @chkScrollBordersStart + 2e3
-        @chkScrlBrdrTimeout = 
-          setTimeout (=> @chkScrollBorders editX, editY), 100
-    

@@ -2,9 +2,7 @@
   lib/box-edit.coffee
   cursor doesn't change until move
   wrap problems when shrinking page
-  border should check against longest line contained
   scrollwheel broken
-  box not updated on auto-scroll
 ###
 
 SubAtom = require 'sub-atom'

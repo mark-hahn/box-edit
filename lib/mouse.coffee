@@ -30,19 +30,6 @@ module.exports =
           editY2 = e.pageY - @editorPageY
           [x1, y1, x2, y2] = @edit2textXY @initEditX1, @initEditY1, editX2, editY2
           @setBoxByXY x1, y1, x2, y2
-          @chkScrollBorders editX2, editY2
-          # if (not (6 * @chrWid < editX2 < @editorPageW - 2 * @chrWid) or
-          #     not (2 * @chrHgt < editY2 < @editorPageH - 2 * @chrHgt))
-          #   [ofsX, ofsY] = @getScrollOfs()
-          #   row = (Math.round (y2 + ofsY) / @chrHgt) - 1
-          #   col =  Math.round (x2 + ofsX) / @chrWid
-          #   @editor.scrollToScreenPosition [row-2*@chrH, col]
-          #   @editor.scrollToScreenPosition [row,         col-2*@chrW]
-          #   @editor.scrollToScreenPosition [row+2*@chrH, col]
-          #   @editor.scrollToScreenPosition [row,         col+2*@chrW]
-          #   [newOfsX, newOfsY] = @getScrollOfs yes
-          #   if newOfsX isnt ofsX or newOfsY isnt ofsY
-          #     @refreshBoxPos()
                 
         when 'mouseup'
           if not @mouseIsDown then return
