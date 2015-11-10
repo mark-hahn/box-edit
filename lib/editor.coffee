@@ -1,7 +1,7 @@
 
 log = (args...) -> 
   console.log.apply console, ['box-edit, edit:'].concat args
-
+wrap = require 'wordwrap'
 
 module.exports =
   openTextEditor: ->
@@ -11,8 +11,9 @@ module.exports =
     t.id = 'boxsel-txtarea'
     t   .classList.add 'native-key-bindings'
     @box.classList.add 'native-key-bindings'
-    t.rows = row2-row1+1; t.cols = col2-col1-1
+    t.rows = row2-row1+1; t.cols = @textEditorNumCols = col2-col1-1
     t.spellcheck = yes;   t.wrap = 'hard'
+    t.autocomplete = no
     t.value = text
     [x1, y1, x2, y2] = @getBoxXY()     
     w = Math.max x2 - x1 + 30, 120     
@@ -44,7 +45,6 @@ module.exports =
     @setBoxVisible yes
     if @textEditor 
       @addToUndo @editBox('getText'), @getBoxRowCol()
-      @editBox 'setText', @textEditor.value
+      @editBox 'setText', wrap(@textEditorNumCols+5) @textEditor.value
       @cover.removeChild @textEditor
       @textEditor = null
-

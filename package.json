@@ -9,9 +9,12 @@
     "atom": ">1.0.0"
   },
   "activationCommands": {
-    "atom-text-editor": ["box-edit:toggle"]
+    "atom-text-editor": [
+      "box-edit:toggle"
+    ]
   },
   "dependencies": {
-    "sub-atom": "^1.1.0"
+    "sub-atom": "^1.1.0",
+    "wordwrap": "^1.0.0"
   }
 }
