@@ -21,33 +21,33 @@ class BoxEdit
          @editor.isDestroyed()
       @clear()
       return 
-      
     @active = yes
-    @getAtomReferences()
+    @pane = @wspace.getActivePane()
+    @editorView = atom.views.getView @editor
+    
     @mouseInit()
     @getPageDims()
     @addBoxEle()
     @atomSelectionsToBox()
-    @checkPageDims()
     @startUndo()
+    @startCheckingPageDims()
     
     @pane.onDidChangeActiveItem    => @clear()
     document.body.onkeydown  = (e) => @keyDown  e
     document.body.onkeypress = (e) => @keyPress e
-    
-  getAtomReferences: ->
-    @pane       = @wspace.getActivePane()
-    @editorView = atom.views.getView @editor
-    @buffer     = @editor.getBuffer()
-  
+
   clear: ->
+    if not @active then return
     @active = no
     haveEditor = (@editor and not @editor.isDestroyed() and 
                     @pane and not   @pane.isDestroyed())
     @boxToAtomSelections() if haveEditor
     @removeBoxEle()
     @endUndo()
-    @pane?.activate() if haveEditor
+    if haveEditor
+      @pane?.activate() 
+      @editorView.classList.add    'boxsel-cursor'
+      @editorView.classList.remove 'boxsel-cursor'
     @pane = @editorView = @editorComp = @buffer = null
 
   deactivate: ->
@@ -60,6 +60,7 @@ mix = (mixinName) ->
     BoxEdit.prototype[key] = mixin[key]
 
 mix 'box'
+mix 'edit-text'
 mix 'editor'
 mix 'keyboard'
 mix 'mouse'

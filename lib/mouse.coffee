@@ -5,7 +5,6 @@ log = (args...) ->
 module.exports =
   mouseInit: ->
     @anchorEditX1 = @anchorEditY1 = null
-    # log 'mouseInit', {@anchorEditX1}
     @mouseIsDown = no
     
   mouseEvent: (e) ->
@@ -25,7 +24,6 @@ module.exports =
         else
           editX2 = e.pageX - @editorPageX
           editY2 = e.pageY - @editorPageY
-          # log 'mousedown', {@anchorEditX1}
           @setBoxByXY @edit2textXY(@anchorEditX1, @anchorEditY1, editX2, editY2)...
       
       when 'mousemove' 

@@ -5,7 +5,7 @@ wrap = require 'wordwrap'
 
 module.exports =
   openTextEditor: ->
-    text = @editBox 'getText'
+    text = @editText 'getText'
     [row1, col1, row2, col2] = @getBoxRowCol()
     t = @textEditor = document.createElement 'textArea'
     t.id = 'boxsel-txtarea'
@@ -44,7 +44,7 @@ module.exports =
   closeTextEditor: ->
     @setBoxVisible yes
     if @textEditor 
-      @addToUndo @editBox('getText'), @getBoxRowCol()
-      @editBox 'setText', wrap(@textEditorNumCols+5) @textEditor.value
+      @addToUndo @editText('getText'), @getBoxRowCol()
+      @editText 'setText', wrap(@textEditorNumCols+5) @textEditor.value
       @cover.removeChild @textEditor
       @textEditor = null

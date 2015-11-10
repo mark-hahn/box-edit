@@ -19,7 +19,7 @@ module.exports =
     @scrollTop  = @editorView.getScrollTop()
     @scrollLeft = @editorView.getScrollLeft()
 
-  checkPageDims: ->
+  startCheckingPageDims: ->
     if not @editorView then return
     {left, top, width, height} = (editRect = @editorView.getBoundingClientRect())
     if  @editorPageX  isnt left                                       or
@@ -37,9 +37,7 @@ module.exports =
       @refreshCoverPos()
       @refreshBoxPos()
       @refreshTxtEditorPos()
-      setTimeout (=> @checkPageDims()), 200
-      return
-    setTimeout (=> @checkPageDims()), 200
+    setTimeout (=> @startCheckingPageDims()), 200
   
   getScrollOfs: (update) ->
     if update or not @scrollOfs

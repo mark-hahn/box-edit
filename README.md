@@ -52,9 +52,9 @@ This has been used in my personal editor for a short while.  Use with caution.  
     
 ### Known Problems:
 
-- Wrap problems when shrinking page
-- Mouse cursor doesn't change until mouse moves
-          
+- clicking gives wrong point when scrolled
+  Atom undo after closing box goes to 0,0
+
 ### To-Do 
           
 - Add arrow-key support to allow keyboard-only selecting and editing.

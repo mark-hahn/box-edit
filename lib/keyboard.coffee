@@ -6,7 +6,7 @@ module.exports =
   unicodeChr: (e, chr) ->
     # log 'unicodeChr', chr.charCodeAt(0), '"'+chr+'"'
     if chr.charCodeAt(0) >= 32
-      @editBox 'fill', chr
+      @editText 'fill', chr
     e.stopPropagation()
     e.preventDefault()
 
@@ -26,10 +26,10 @@ module.exports =
     # 
     switch codeStr
       when 'Alt-S'               then @toggle()
-      when 'Ctrl-X'              then @editBox 'cut'
-      when 'Ctrl-C'              then @editBox 'copy'
-      when 'Ctrl-V'              then @editBox 'paste'
-      when 'Backspace', 'Delete' then @editBox 'del'
+      when 'Ctrl-X'              then @editText 'cut'
+      when 'Ctrl-C'              then @editText 'copy'
+      when 'Ctrl-V'              then @editText 'paste'
+      when 'Backspace', 'Delete' then @editText 'del'
       when 'Ctrl-A'              then @selectAll()
       when 'Ctrl-Z'              then @undo()
       when 'Ctrl-Y'              then @redo()
@@ -46,11 +46,12 @@ module.exports =
     e.preventDefault()
     
   keyDown: (e) ->
-    keyId = e.keyIdentifier
-    if @textEditor and keyId not in ['U+0009', 'U+001B'] then return
-    if not @active or not @editor or @editor.isDestroyed()
+    if not @active then return
+    if not @editor or @editor.isDestroyed()
       @clear()
       return
+    keyId = e.keyIdentifier
+    if @textEditor and keyId not in ['U+0009', 'U+001B'] then return
     if keyId[0..1] is 'U+'
       code = parseInt keyId[2..5], 16
       switch code
@@ -73,9 +74,8 @@ module.exports =
     @keyAction e, keyId
     
   keyPress: (e) ->
-    if @textEditor then return
-    if not @active or
-       not @editor or @editor.isDestroyed()
+    if not @active or @textEditor then return
+    if not @editor or @editor.isDestroyed()
       @clear()
       return
     chr = String.fromCharCode e.charCode
