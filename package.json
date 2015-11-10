@@ -16,5 +16,13 @@
   "dependencies": {
     "sub-atom": "^1.1.0",
     "wordwrap": "^1.0.0"
-  }
+  },
+  "keywords": [
+    "box",
+    "column",
+    "rectangular",
+    "selection",
+    "atom",
+    "editor"
+  ]
 }
