@@ -3,6 +3,7 @@ log = (args...) ->
   console.log.apply console, ['box-edit,  box:'].concat args
 
 module.exports =
+  
   addBoxEle: ->
     c = @cover = document.createElement 'div'
     c.id = 'boxsel-cover'
@@ -30,6 +31,7 @@ module.exports =
       
   removeBoxEle: ->
     if @cover 
+      if @textEditor then @closeTextEditor()
       document.body.removeChild @cover
       @cover.removeChild @box
       @cover = @box = null
@@ -39,17 +41,19 @@ module.exports =
       (if @boxVisible then 'visible' else 'hidden')
 
   setBoxByXY: (x1, y1, x2, y2, haveRowCol) ->
+    log 'setBoxByXY0', {x1, y1, x2, y2, haveRowCol}
     if (dot = (x2 is 'dot')) then [x2, y2] = [x1, y1]
     x1 = Math.round(x1/@chrWid) * @chrWid
     y1 = Math.round(y1/@chrHgt) * @chrHgt
     x2 = Math.round(x2/@chrWid) * @chrWid
     y2 = Math.round(y2/@chrHgt) * @chrHgt
     [editX1, editY1, editX2, editY2] = @text2editXY x1, y1, x2, y2
-    @initEditX1 ?= x1
-    @initEditY1 ?= y1
+    log 'setBoxByXY1 setting @anchorEditX1', @anchorEditX1, x1
+    @anchorEditX1 ?= x1
+    @anchorEditY1 ?= y1
     if editX1 > editX2 then [editX1, editX2] = [editX2, editX1]
     if editY1 > editY2 then [editY1, editY2] = [editY2, editY1]
-    # log 'setBoxByXY', {x1, y1, x2, y2, editX1, editY1, editX2, editY2, @initEditX1, @initEditY1, haveRowCol}
+    log 'setBoxByXY2', {x1, y1, x2, y2, editX1, editY1, editX2, editY2, @anchorEditX1, @anchorEditY1, haveRowCol}
     bs = @box.style 
     bs.left = editX1 + 'px'
     bs.top  = editY1 + 'px'
@@ -66,7 +70,7 @@ module.exports =
       @boxRow2 = Math.min botRow, (Math.round y2 / @chrHgt) - (if dot then 0 else 1)
       @boxCol2 =                   Math.round x2 / @chrWid
     @setBoxVisible yes
-    # log 'setBoxByXY', {@boxRow1, @boxCol1, @boxRow2, @boxCol2, haveRowCol}
+    # log 'setBoxByXY3', {@boxRow1, @boxCol1, @boxRow2, @boxCol2, haveRowCol}
 
   setBoxByRowCol: (@boxRow1, @boxCol1, @boxRow2, @boxCol2) ->
     # log 'setBoxByRowCol', {@boxRow1, @boxCol1, @boxRow2, @boxCol2}
@@ -89,7 +93,6 @@ module.exports =
     @setBoxByRowCol @boxRow1, @boxCol1, @boxRow2, @boxCol2
     
   editBox: (cmd, text, addToUndo = yes) ->
-    # log '@editBox', {cmd, text}
     if addToUndo
       oldBufferText = @editor.getText()
       oldRowCol = [row1, col1, row2, col2] = @getBoxRowCol()
@@ -171,9 +174,11 @@ module.exports =
       col1 = Math.min col1, range.start.column, range.end.column
       row2 = Math.max row2, range.start.row,    range.end.row
       col2 = Math.max col2, range.start.column, range.end.column
+    [@anchorEditX1, @anchorEditY1] = @text2editXY col1 * @chrWid, row1 * @chrHgt, 0, 0
+    # log 'atomSelectionsToBox', {@anchorEditX1, col1}
     @setBoxByRowCol row1, col1, row2, col2
-    for selection in @editor.getSelections()
-      selection.destroy()
+    for sel in @editor.getSelections()
+      sel.destroy()
     @editor.getLastCursor().setVisible no
     
   boxToAtomSelections: ->

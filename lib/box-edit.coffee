@@ -7,7 +7,7 @@ SubAtom = require 'sub-atom'
 log = (args...) -> 
   console.log.apply console, ['box-edit, bsel:'].concat args
 
-class BoxSelect
+class BoxEdit
   
   activate: ->
     @wspace = atom.workspace
@@ -24,6 +24,7 @@ class BoxSelect
       
     @active = yes
     @getAtomReferences()
+    @mouseInit()
     @getPageDims()
     @addBoxEle()
     @atomSelectionsToBox()
@@ -37,15 +38,14 @@ class BoxSelect
   getAtomReferences: ->
     @pane       = @wspace.getActivePane()
     @editorView = atom.views.getView @editor
-    @editorComp = @editorView.component
     @buffer     = @editor.getBuffer()
   
   clear: ->
+    @active = no
     haveEditor = (@editor and not @editor.isDestroyed() and 
                     @pane and not   @pane.isDestroyed())
     @boxToAtomSelections() if haveEditor
     @removeBoxEle()
-    @mouseIsDown = @active = no
     @endUndo()
     @pane?.activate() if haveEditor
     @pane = @editorView = @editorComp = @buffer = null
@@ -57,7 +57,7 @@ class BoxSelect
 mix = (mixinName) ->
   mixin = require './' + mixinName
   for key in Object.keys mixin
-    BoxSelect.prototype[key] = mixin[key]
+    BoxEdit.prototype[key] = mixin[key]
 
 mix 'box'
 mix 'editor'
@@ -66,5 +66,5 @@ mix 'mouse'
 mix 'page'
 mix 'undo'
 
-module.exports = new BoxSelect
+module.exports = new BoxEdit
 
