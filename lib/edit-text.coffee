@@ -42,8 +42,12 @@ module.exports =
         @editor.bufferRangeForScreenRange [[screenRow,col1],[screenRow,col2]]
       bufRow = bufRange.start.row
       @ensureLineWid bufRow, col1
+      # log 'bufRange1', {screenRow, col1, col2}
       bufRange = 
         @editor.bufferRangeForScreenRange [[screenRow,col1],[screenRow,col2]]
+      bufRange.start.column = col1 # fix problem in leading whitespace
+      bufRange.end.column   = col2
+      # log 'bufRange2', {bufRange}
       screenRow++
       # if ++dbg > 100000 then log 'edit box infinite loop'; return
       if bufRow is lastBufRow then continue
