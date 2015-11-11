@@ -52,8 +52,9 @@ This has been used in my personal editor for a short while.  Use with caution.  
     
 ### Known Problems:
 
-- clicking gives wrong point when scrolled
-  Atom undo after closing box goes to 0,0
+- After exiting box mode the cursor doesn't change back until mouse moves
+    (apparently this is a chrome bug, a lot of people complain)
+- opening editor loads wrong text
 
 ### To-Do 
           

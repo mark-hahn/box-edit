@@ -10,31 +10,33 @@ log = (args...) ->
 class BoxEdit
   
   activate: ->
-    @wspace = atom.workspace
     @subs = new SubAtom
     @subs.add atom.commands.add 'atom-text-editor', 
                                 'box-edit:toggle': => @toggle()
   
   toggle: ->
     if @active or
-         not (@editor = @wspace.getActiveTextEditor()) or 
+         not (@editor = atom.workspace.getActiveTextEditor()) or 
          @editor.isDestroyed()
       @clear()
       return 
+      
     @active = yes
-    @pane = @wspace.getActivePane()
+    @pane = atom.workspace.getActivePane()
     @editorView = atom.views.getView @editor
     
-    @mouseInit()
     @getPageDims()
+    @pageInit()
+    @mouseInit()
     @addBoxEle()
     @atomSelectionsToBox()
     @startUndo()
     @startCheckingPageDims()
     
-    @pane.onDidChangeActiveItem    => @clear()
-    document.body.onkeydown  = (e) => @keyDown  e
-    document.body.onkeypress = (e) => @keyPress e
+    @subs.add @pane.onDidChangeActiveItem => @clear()
+    @subs.add @editor.onDidDestroy        => @clear()
+    document.body.onkeydown  = (e)        => @keyDown  e
+    document.body.onkeypress = (e)        => @keyPress e
 
   clear: ->
     if not @active then return
@@ -45,9 +47,10 @@ class BoxEdit
     @removeBoxEle()
     @endUndo()
     if haveEditor
-      @pane?.activate() 
-      @editorView.classList.add    'boxsel-cursor'
-      @editorView.classList.remove 'boxsel-cursor'
+      @pane?.activate()
+      # doesn't fix cursor not changing 
+      # @editorView.classList.add    'boxsel-cursor'
+      # @editorView.classList.remove 'boxsel-cursor'
     @pane = @editorView = @editorComp = @buffer = null
 
   deactivate: ->

@@ -2,22 +2,36 @@
 log = (args...) -> 
   console.log.apply console, ['box-edit, page:'].concat args
 
-
 module.exports =
+  
+  pageInit: ->
+    refresh = =>
+      if @active
+        # log 'refresh'
+        @refreshBoxPos()
+        @refreshTxtEditorPos()
+    @subs.add @editorView.onDidChangeScrollTop  refresh
+    @subs.add @editorView.onDidChangeScrollLeft refresh
+    @subs.add  @editor.onDidAddGutter           refresh
+    @subs.add  @editor.onDidRemoveGutter        refresh
+    
   getElement:  (sel) -> @editorView.shadowRoot.querySelector sel
   getElements: (sel) -> @editorView.shadowRoot.querySelectorAll sel
   
   getPageDims: (editRect, chrWid, chrHgt) ->
     @chrWid = (chrWid ? @editor.getDefaultCharWidth()  )
     @chrHgt = (chrHgt ? @editor.getLineHeightInPixels())
-    {left: @editorPageX, top: @editorPageY, width: @editorWtotal, height: @editorHtotal} =
+    {left:  @editorPageX,  top:    @editorPageY, \
+     width: @editorWtotal, height: @editorHtotal} =
                    (editRect ? @editorView.getBoundingClientRect())
     @editorW    = @editorWtotal - (@scrollBarW = @editorView.getVerticalScrollbarWidth())
     @editorH    = @editorHtotal - (@scrollBarH = @editorView.getHorizontalScrollbarHeight())
-    @textOfsX   = @editorW - @editorView.getWidth()
-    @textOfsY   = @editorH - @editorView.getHeight()
-    @scrollTop  = @editorView.getScrollTop()
-    @scrollLeft = @editorView.getScrollLeft()
+    for @scrollRefEle in @getElements '.line'
+      row = +@scrollRefEle.getAttribute 'data-screen-row'
+      {left: linePageX, top: linePageY} = @scrollRefEle.getBoundingClientRect()
+      if 0 <= (linePageY - @editorPageY) < 2 * @chrHgt then break
+    @textOfsX   = linePageX - @editorPageX
+    @textOfsY   = @editorPageY - (linePageY - row * @chrHgt)
 
   startCheckingPageDims: ->
     if not @editorView then return
@@ -29,33 +43,23 @@ module.exports =
         @chrWid       isnt (chrWid = @editor.getDefaultCharWidth()  ) or
         @chrHgt       isnt (chrHgt = @editor.getLineHeightInPixels()) or
         @scrollBarW   isnt @editorView.getVerticalScrollbarWidth()    or
-        @scrollBarH   isnt @editorView.getHorizontalScrollbarHeight() or
-        @scrollTop    isnt @editorView.getScrollTop()                 or
-        @scrollLeft   isnt @editorView.getScrollLeft()
+        @scrollBarH   isnt @editorView.getHorizontalScrollbarHeight()
       @getPageDims editRect, chrWid, chrHgt
-      @getScrollOfs yes
       @refreshCoverPos()
-      @refreshBoxPos()
-      @refreshTxtEditorPos()
-    setTimeout (=> @startCheckingPageDims()), 200
+    setTimeout (=> @startCheckingPageDims()), 500
   
-  getScrollOfs: (update) ->
-    if update or not @scrollOfs
-      for @scrollRefEle in @getElements '.line'
-        row = +@scrollRefEle.getAttribute 'data-screen-row'
-        {left: linePageX, top: linePageY} = @scrollRefEle.getBoundingClientRect()
-        if 0 <= (linePageY - @editorPageY) < 2 * @chrHgt then break
-      @scrollRefEleOfs = @scrollRefEle.offsetTop
-      @scrollOfs = [@editorPageX - linePageX, @editorPageY - (linePageY - row * @chrHgt)]
-    @scrollOfs  
+  getScrollOfs: ->
+    [@editorView.getScrollLeft()-@textOfsX, @editorView.getScrollTop()]
     
   edit2textXY: (x1, y1, x2, y2) ->
     [scrollOfsX, scrollOfsY] = @getScrollOfs()
+    log 'edit2textXY ScrollOfs', {scrollOfsX, scrollOfsY}
     [x1 + scrollOfsX, y1 + scrollOfsY
      x2 + scrollOfsX, y2 + scrollOfsY]
        
   text2editXY: (x1, y1, x2, y2) ->
     [scrollOfsX, scrollOfsY] = @getScrollOfs()
+    log 'text2editXY getScrollOfs', {scrollOfsX, scrollOfsY}
     [x1 - scrollOfsX, y1 - scrollOfsY
      x2 - scrollOfsX, y2 - scrollOfsY]
   

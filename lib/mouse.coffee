@@ -33,7 +33,7 @@ module.exports =
       when 'mouseup'
         if not @mouseIsDown then return
         @mouseIsDown = no
-        @setBoxByMouse e
+        # @setBoxByMouse e
 
       when 'wheel'
         @editorView.setScrollTop  @editorView.getScrollTop()  + e.deltaY

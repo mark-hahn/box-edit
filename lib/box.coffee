@@ -23,6 +23,35 @@ module.exports =
     c.onmouseup   = (e) => @mouseEvent(e)
     c.onwheel     = (e) => @mouseEvent(e)
   
+  atomSelectionsToBox: ->
+    row1 = col1 = +Infinity
+    row2 = col2 = -Infinity
+    for sel in @editor.getSelections()
+      range = sel.getBufferRange()
+      row1 = Math.min row1, range.start.row,    range.end.row
+      col1 = Math.min col1, range.start.column, range.end.column
+      row2 = Math.max row2, range.start.row,    range.end.row
+      col2 = Math.max col2, range.start.column, range.end.column
+    [@anchorEditX1, @anchorEditY1] = 
+      @text2editXY col1 * @chrWid, row1 * @chrHgt, 0, 0
+    @setBoxByRowCol row1, col1, row2, col2
+    scrollTop = @editorView.getScrollTop()
+    lastCursorPos = @editor.getCursorScreenPosition()
+    @editor.setSelectedScreenRange \
+      [[lastCursorPos.row, lastCursorPos.column],
+       [lastCursorPos.row, lastCursorPos.column]]
+    @editor.getLastCursor().setVisible no
+    @editorView.setScrollTop scrollTop
+
+  boxToAtomSelections: ->
+    oldSelections = @editor.getSelections()
+    [row1, col1, row2, col2] = @getBoxRowCol()
+    scrollTop = @editorView.getScrollTop()
+    for row in [row1..row2]
+      @editor.addSelectionForBufferRange [[row, col1], [row, col2]]
+    for sel in oldSelections then sel.destroy()
+    @editorView.setScrollTop scrollTop
+    
   refreshCoverPos: ->
     cs = @cover.style
     cs.left   = @editorPageX  + 'px'
@@ -48,6 +77,7 @@ module.exports =
     x2 = Math.round(x2/@chrWid) * @chrWid
     y2 = Math.round(y2/@chrHgt) * @chrHgt
     [editX1, editY1, editX2, editY2] = @text2editXY x1, y1, x2, y2
+    # log 'setBoxByXY @text2editXY', {x1, y1, x2, y2, editX1, editY1, editX2, editY2}
     if editX1 > editX2 then [editX1, editX2] = [editX2, editX1]
     if editY1 > editY2 then [editY1, editY2] = [editY2, editY1]
     bs = @box.style 
@@ -59,14 +89,17 @@ module.exports =
     else
       bs.width  = '0'
       bs.height = @chrHgt + 'px'
+    # log 'setBoxByXY1', {@boxRow1, @boxCol1, @boxRow2, @boxCol2}
     if not haveRowCol
       bot = @editor.screenPositionForBufferPosition [9e9, 9e9]
       @boxRow1 = Math.max       0,  Math.round y1 / @chrHgt
       @boxCol1 = Math.max       0,  Math.round x1 / @chrWid
       @boxRow2 = Math.min bot.row, (Math.round y2 / @chrHgt) - (if dot then 0 else 1)
       @boxCol2 =                    Math.round x2 / @chrWid
-      @boxBufRange = @editor.bufferRangeForScreenRange \
-                  [[@boxRow1, @boxCol1], [@boxRow2, @boxCol2]]
+    # log 'setBoxByXY2', {@boxRow1, @boxCol1, @boxRow2, @boxCol2}
+    @boxBufRange = @editor.bufferRangeForScreenRange \
+                [[@boxRow1, @boxCol1], [@boxRow2, @boxCol2]]
+    # log 'setBoxByXY3', {@boxBufRange}
     @setBoxVisible yes
 
   setBoxByRowCol: (@boxRow1, @boxCol1, @boxRow2, @boxCol2) ->
@@ -74,9 +107,13 @@ module.exports =
                 @boxCol2 * @chrWid, (@boxRow2+1) * @chrHgt, yes
   
   refreshBoxPos: ->
-    boxScrnRange = @editor.screenRangeForBufferRange @boxBufRange
-    @boxRow1 = boxScrnRange.start.row
-    @boxRow2 = boxScrnRange.end.row
+    # log 'refreshBoxPos', {@boxBufRange}
+    if @boxBufRange
+      boxScrnRange = @editor.screenRangeForBufferRange @boxBufRange
+      @boxRow1 = boxScrnRange.start.row
+      @boxRow2 = boxScrnRange.end.row
+    # log 'refreshBoxPos', {@boxRow1, @boxCol1, @boxRow2, @boxCol2}
+    
     @setBoxByRowCol @boxRow1, @boxCol1, @boxRow2, @boxCol2
     
   getBoxXY: -> 
@@ -98,26 +135,3 @@ module.exports =
       col2 = Math.max col2, @editor.lineTextForBufferRow(row).length
     @setBoxByRowCol 0, 0, row2, col2
     
-  atomSelectionsToBox: ->
-    row1 = col1 = +Infinity
-    row2 = col2 = -Infinity
-    for sel in @editor.getSelections()
-      range = sel.getBufferRange()
-      row1 = Math.min row1, range.start.row,    range.end.row
-      col1 = Math.min col1, range.start.column, range.end.column
-      row2 = Math.max row2, range.start.row,    range.end.row
-      col2 = Math.max col2, range.start.column, range.end.column
-    [@anchorEditX1, @anchorEditY1] = 
-      @text2editXY col1 * @chrWid, row1 * @chrHgt, 0, 0
-    @setBoxByRowCol row1, col1, row2, col2
-    for sel in @editor.getSelections()
-      sel.destroy()
-    @editor.getLastCursor().setVisible no
-    
-  boxToAtomSelections: ->
-    oldSelections = @editor.getSelections()
-    [row1, col1, row2, col2] = @getBoxRowCol()
-    for row in [row1..row2]
-      @editor.addSelectionForBufferRange [[row, col1], [row, col2]]
-    for sel in oldSelections then sel.destroy()
-
