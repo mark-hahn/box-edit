@@ -1,4 +1,4 @@
-
+c
 log = (args...) -> 
   console.log.apply console, ['box-edit,  box:'].concat args
 
@@ -44,12 +44,15 @@ module.exports =
     @editorView.setScrollTop scrollTop
 
   boxToAtomSelections: ->
-    oldSelections = @editor.getSelections()
-    [row1, col1, row2, col2] = @getBoxRowCol()
     scrollTop = @editorView.getScrollTop()
+    [row1, col1, row2, col2] = @getBoxRowCol()
+    @editor.setSelectedScreenRange [[0, 0], [0, 0]]
+    dummySel = @editor.getSelections()[0]
+    overlaps00 = no
     for row in [row1..row2]
+      overlaps00 or= (row1 is col1 is 0)
       @editor.addSelectionForBufferRange [[row, col1], [row, col2]]
-    for sel in oldSelections then sel.destroy()
+    if not overlaps00 then dummySel.destroy()
     @editorView.setScrollTop scrollTop
     
   refreshCoverPos: ->

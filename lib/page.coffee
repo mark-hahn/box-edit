@@ -53,13 +53,13 @@ module.exports =
     
   edit2textXY: (x1, y1, x2, y2) ->
     [scrollOfsX, scrollOfsY] = @getScrollOfs()
-    log 'edit2textXY ScrollOfs', {scrollOfsX, scrollOfsY}
+    # log 'edit2textXY ScrollOfs', {scrollOfsX, scrollOfsY}
     [x1 + scrollOfsX, y1 + scrollOfsY
      x2 + scrollOfsX, y2 + scrollOfsY]
        
   text2editXY: (x1, y1, x2, y2) ->
     [scrollOfsX, scrollOfsY] = @getScrollOfs()
-    log 'text2editXY getScrollOfs', {scrollOfsX, scrollOfsY}
+    # log 'text2editXY getScrollOfs', {scrollOfsX, scrollOfsY}
     [x1 - scrollOfsX, y1 - scrollOfsY
      x2 - scrollOfsX, y2 - scrollOfsY]
   
