@@ -3,6 +3,8 @@
 
 An Atom package to edit rectangular areas; supports short lines.
 
+![box-edit-demo](https://cloud.githubusercontent.com/assets/811455/11103846/ea8676f2-8879-11e5-80fd-deb13f47cf89.gif)
+
 Box-edit provides for selecting and editing a box (rectangular area) of text in the Atom editor. When in box mode the Atom cursors disappear and a new red box cursor takes over.  You can cut, paste, insert, etc., on a box instead of character strings. Box-edit supports virtual spaces to the right of lines which solves a problem found in rectangular selection tools that use Atom cursors/selections.
 
 ### Features
