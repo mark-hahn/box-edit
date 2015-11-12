@@ -1,7 +1,7 @@
 {
   "name": "box-edit",
   "main": "./lib/box-edit",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "An Atom package to edit rectangular areas; supports short lines.",
   "repository": "https://github.com/mark-hahn/box-edit",
   "license": "MIT",
