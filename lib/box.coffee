@@ -23,6 +23,15 @@ module.exports =
     c.onmouseup   = (e) => @mouseEvent(e)
     c.onwheel     = (e) => @mouseEvent(e)
   
+  hideAtomSelections: (row=0, col=0) ->
+    scrollTop = @editorView.getScrollTop()
+    @editor.setSelectedScreenRange [[row, col], [row, col]]
+    dummySel = @editor.getSelections()[0]
+    lastCursorPos = @editor.getCursorScreenPosition()
+    @editor.getLastCursor().setVisible no
+    @editorView.setScrollTop scrollTop
+    dummySel
+    
   atomSelectionsToBox: ->
     row1 = col1 = +Infinity
     row2 = col2 = -Infinity
@@ -35,19 +44,13 @@ module.exports =
     [@anchorEditX1, @anchorEditY1] = 
       @text2editXY col1 * @chrWid, row1 * @chrHgt, 0, 0
     @setBoxByRowCol row1, col1, row2, col2
-    scrollTop = @editorView.getScrollTop()
-    lastCursorPos = @editor.getCursorScreenPosition()
-    @editor.setSelectedScreenRange \
-      [[lastCursorPos.row, lastCursorPos.column],
-       [lastCursorPos.row, lastCursorPos.column]]
-    @editor.getLastCursor().setVisible no
-    @editorView.setScrollTop scrollTop
+    @hideSelInterval = setInterval (=> @hideAtomSelections()), 500
 
   boxToAtomSelections: ->
+    clearInterval @hideSelInterval
     scrollTop = @editorView.getScrollTop()
     [row1, col1, row2, col2] = @getBoxRowCol()
-    @editor.setSelectedScreenRange [[0, 0], [0, 0]]
-    dummySel = @editor.getSelections()[0]
+    dummySel = @hideAtomSelections row1, col1
     overlaps00 = no
     for row in [row1..row2]
       overlaps00 or= (row1 is col1 is 0)

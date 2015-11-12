@@ -14,7 +14,7 @@ module.exports =
     t.rows = row2-row1+1; t.cols = @textEditorNumCols = col2-col1-1
     t.spellcheck = yes;   t.wrap = 'hard'
     t.autocomplete = no
-    t.value = text
+    t.value = text.replace /^\s*|\s*$/g, ''
     [x1, y1, x2, y2] = @getBoxXY()     
     w = Math.max x2 - x1 + 30, 120     
     h = Math.max y2 - y1 + 30,  40
